@@ -8,6 +8,7 @@ import pytest
 
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.engines.bayesian import BayesianMpeEngine
+from ontorag_flow.engines.causal import CausalSimulationEngine
 from ontorag_flow.engines.llm_agent import LlmAgentEngine
 from ontorag_flow.engines.rule import RuleEngine
 from ontorag_flow.engines.selection import EngineResolver, EngineUnavailableError
@@ -73,3 +74,21 @@ def test_llm_without_client_raises() -> None:
 def test_unknown_engine_name_raises() -> None:
     with pytest.raises(EngineUnavailableError):
         EngineResolver().kind_for(_proc(engine="bogus"))
+
+
+def test_causal_inferred_from_causal_config() -> None:
+    # causal config takes precedence over bayesian / rules in inference
+    assert EngineResolver().kind_for(_proc(causal={"target": {"done": True}})) == "causal"
+
+
+def test_for_process_builds_causal_with_client() -> None:
+    resolver = EngineResolver(ontorag_client=FakeOntorag())
+    assert isinstance(
+        resolver.for_process(_proc(causal={"target": {"done": True}})),
+        CausalSimulationEngine,
+    )
+
+
+def test_causal_without_client_raises() -> None:
+    with pytest.raises(EngineUnavailableError):
+        EngineResolver().for_process(_proc(causal={"target": {"done": True}}))

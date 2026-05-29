@@ -19,10 +19,12 @@ from ontorag_flow.core.case_manager import (
     CaseStateTransitionError,
     CompensationError,
     ConstraintViolationError,
+    CounterfactualError,
     NoEngineConfiguredError,
     ProcessNotFoundError,
 )
 from ontorag_flow.core.executor import ActionValidationError
+from ontorag_flow.engines.causal import CounterfactualResult
 from ontorag_flow.engines.selection import EngineUnavailableError
 
 router = APIRouter(prefix="/cases", tags=["cases"])
@@ -189,6 +191,39 @@ async def resume_case(
     except CaseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except CaseStateTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+class CounterfactualRequest(BaseModel):
+    swap_activity_uri: str
+    action_uri: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    target: dict[str, Any] | None = None
+
+
+@router.post(
+    "/{case_uri}/counterfactual",
+    operation_id="counterfactual_replay",
+    response_model=CounterfactualResult,
+)
+async def counterfactual_replay(
+    case_uri: str,
+    body: CounterfactualRequest,
+    manager: CaseManager = Depends(get_case_manager),
+) -> CounterfactualResult:
+    """Replay a case with a swapped action via ontorag's counterfactual tool."""
+
+    try:
+        return await manager.counterfactual(
+            case_uri,
+            swap_activity_uri=body.swap_activity_uri,
+            action_uri=body.action_uri,
+            params=body.params,
+            target=body.target,
+        )
+    except (CaseNotFoundError, ProcessNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (CounterfactualError, NoEngineConfiguredError, EngineUnavailableError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 

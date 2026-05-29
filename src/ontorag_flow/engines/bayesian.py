@@ -80,54 +80,10 @@ class BayesianConfig(BaseModel):
     candidates: list[BayesianCandidate] = Field(default_factory=list)
 
 
-def _extract_posterior(result: Any) -> float:
-    """Coerce an ontorag posterior response into a float in ``[0, 1]``.
+from ontorag_flow.engines._posteriors import extract_posterior as _extract_posterior
 
-    ontorag v0.7's exact ``compute_posterior`` schema is **provisional**, so this
-    accepts, in order:
-
-    1. a bare ``float``/``int`` (the posterior itself);
-    2. a mapping with a numeric ``"posterior"`` key;
-    3. a mapping with a numeric ``"probability"`` key.
-
-    Args:
-        result: Whatever the ontorag tool returned.
-
-    Returns:
-        The posterior probability as a float.
-
-    Raises:
-        ValueError: If no probability can be extracted, or it falls outside
-            ``[0, 1]``.
-    """
-
-    value: Any
-    if isinstance(result, bool):
-        # bool is an int subclass; a bare bool posterior is almost certainly a
-        # malformed response, so reject it explicitly rather than coercing to 1/0.
-        raise ValueError(f"Cannot extract a posterior from boolean result: {result!r}")
-    elif isinstance(result, (int, float)):
-        value = result
-    elif isinstance(result, dict) and isinstance(
-        result.get("posterior"), (int, float)
-    ) and not isinstance(result.get("posterior"), bool):
-        value = result["posterior"]
-    elif isinstance(result, dict) and isinstance(
-        result.get("probability"), (int, float)
-    ) and not isinstance(result.get("probability"), bool):
-        value = result["probability"]
-    else:
-        raise ValueError(
-            "Could not extract a posterior probability from ontorag response "
-            f"(expected a float, or a 'posterior'/'probability' key): {result!r}"
-        )
-
-    posterior = float(value)
-    if not 0.0 <= posterior <= 1.0:
-        raise ValueError(
-            f"Posterior {posterior} is outside the valid probability range [0, 1]."
-        )
-    return posterior
+# Re-exported for backward compatibility; the canonical helper now lives in
+# ``engines/_posteriors.py`` so the Causal engine can share it without a cycle.
 
 
 class BayesianMpeEngine:

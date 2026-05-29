@@ -50,6 +50,10 @@ class ProcessDefinition(BaseModel):
         default=None,
         description="Optional Bayesian decision config interpreted by BayesianMpeEngine.",
     )
+    causal: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional Causal decision config interpreted by CausalSimulationEngine.",
+    )
     engine: str | None = Field(
         default=None,
         description=(

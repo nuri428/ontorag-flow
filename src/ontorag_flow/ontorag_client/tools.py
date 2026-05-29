@@ -48,6 +48,30 @@ async def mpe(client: OntoragClient, evidence: dict[str, Any]) -> Any:
     return await client.call_tool("mpe", {"evidence": evidence})
 
 
+async def do_query(
+    client: OntoragClient, intervention: dict[str, Any], query: Any
+) -> Any:
+    """Pearl's do-operator: P(query | do(intervention)) (requires ontorag v0.8)."""
+
+    return await client.call_tool(
+        "do_query", {"intervention": intervention, "query": query}
+    )
+
+
+async def counterfactual(
+    client: OntoragClient,
+    evidence: dict[str, Any],
+    intervention: dict[str, Any],
+    query: Any,
+) -> Any:
+    """Counterfactual replay: P(query | evidence, do(intervention)) (requires ontorag v0.8)."""
+
+    return await client.call_tool(
+        "counterfactual",
+        {"evidence": evidence, "intervention": intervention, "query": query},
+    )
+
+
 async def smoke_test(client: OntoragClient) -> bool:
     """Verify the ontorag connection works via a trivial ``find_entities`` call.
 

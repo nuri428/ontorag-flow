@@ -303,6 +303,37 @@ def case_propose_next(
     console.print(table)
 
 
+@case_app.command("counterfactual")
+def case_counterfactual(
+    case_uri: str = typer.Argument(..., help="Case URI."),
+    swap_activity_uri: str = typer.Option(..., "--swap", help="Activity URI to swap in history."),
+    action_uri: str = typer.Option(..., "--action", help="Alternative action URI."),
+    param: list[str] = typer.Option(
+        [], "--param", "-p", help="Counterfactual action parameter as key=value (JSON or string).",
+    ),
+) -> None:
+    """Ask 'what if we had taken <action> at <swap> instead?' (requires causal engine)."""
+
+    params = _parse_params(param)
+    try:
+        result = asyncio.run(
+            _with_manager(
+                lambda m: m.counterfactual(
+                    case_uri,
+                    swap_activity_uri=swap_activity_uri,
+                    action_uri=action_uri,
+                    params=params,
+                )
+            )
+        )
+    except (CaseManagerError, EngineUnavailableError) as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[bold]posterior:[/] {result.posterior:.3f}")
+    console.print(f"[bold]rationale:[/] {result.rationale}")
+
+
 @case_app.command("compensate")
 def case_compensate(
     case_uri: str = typer.Argument(..., help="Case URI."),

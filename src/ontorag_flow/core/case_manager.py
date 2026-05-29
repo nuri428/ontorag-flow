@@ -28,6 +28,7 @@ from ontorag_flow.stores.base import CaseStore, ProcessStore
 
 if TYPE_CHECKING:
     from ontorag_flow.engines.base import DecisionEngine
+    from ontorag_flow.engines.causal import CounterfactualResult
 
 # A factory builds a decision engine for a given process (so per-process rules
 # are honoured). Injected by the composition root to keep core free of any
@@ -75,6 +76,10 @@ class CaseStateTransitionError(CaseManagerError):
 
 class ConstraintViolationError(CaseManagerError):
     """The process's mutex/requires constraints reject this action right now."""
+
+
+class CounterfactualError(CaseManagerError):
+    """Counterfactual replay cannot proceed (missing snapshot, unsupported engine, etc.)."""
 
 
 COMPENSATION_ACTION_URI = "urn:ontorag-flow:action:_Compensate"
@@ -159,6 +164,66 @@ class CaseManager:
 
         engine = self._engine_factory(process)
         return await engine.propose_next(case, process)
+
+    async def counterfactual(
+        self,
+        case_uri: str,
+        *,
+        swap_activity_uri: str,
+        action_uri: str,
+        params: dict[str, Any],
+        target: dict[str, Any] | None = None,
+    ) -> "CounterfactualResult":
+        """Replay a case with a swapped action and return the hypothetical outcome.
+
+        Routes the call to the case's resolved decision engine; only causal
+        engines support counterfactual replay (Pearl Rung 3 via ontorag).
+
+        Raises:
+            NoEngineConfiguredError: If the manager has no engine_factory.
+            CaseNotFoundError, ProcessNotFoundError: As applicable.
+            CounterfactualError: If the engine does not support counterfactual
+                replay, or the swap activity is missing / lacks a state_before
+                snapshot.
+        """
+
+        if self._engine_factory is None:
+            raise NoEngineConfiguredError("No decision engine configured.")
+
+        case = await self._cases.get_case(case_uri)
+        if case is None:
+            raise CaseNotFoundError(case_uri)
+        process = await self._processes.get_process(case.process_uri)
+        if process is None:
+            raise ProcessNotFoundError(case.process_uri)
+
+        engine = self._engine_factory(process)
+        replay = getattr(engine, "counterfactual_replay", None)
+        if replay is None:
+            raise CounterfactualError(
+                f"The engine for process {case.process_uri} does not support "
+                "counterfactual replay (need a CausalSimulationEngine)."
+            )
+
+        activity = await self._executor.audit_store.get(swap_activity_uri)
+        if activity is None:
+            raise CounterfactualError(
+                f"Unknown swap activity: {swap_activity_uri}."
+            )
+        if activity.state_before is None:
+            raise CounterfactualError(
+                f"Activity {swap_activity_uri} has no state_before snapshot "
+                "(it predates v0.7)."
+            )
+
+        return await replay(
+            case_uri=case_uri,
+            swap_activity_uri=swap_activity_uri,
+            evidence=activity.state_before,
+            counterfactual_action_uri=action_uri,
+            counterfactual_params=params,
+            target=target if target is not None else (process.goal or {}),
+        )
 
     # --- case writes ------------------------------------------------------
 

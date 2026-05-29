@@ -19,6 +19,7 @@ from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.core.registry import ActionRegistry
 from ontorag_flow.engines.base import DecisionEngine
 from ontorag_flow.engines.bayesian import BayesianMpeEngine, SupportsToolCall
+from ontorag_flow.engines.causal import CausalSimulationEngine
 from ontorag_flow.engines.human import HumanReviewEngine
 from ontorag_flow.engines.llm_agent import LlmAgentEngine, LlmClient
 from ontorag_flow.engines.rule import RuleEngine
@@ -28,7 +29,7 @@ logger = get_logger(__name__)
 
 __all__ = ["EngineResolver", "EngineUnavailableError"]
 
-_VALID_KINDS = frozenset({"rule", "bayesian", "llm", "human"})
+_VALID_KINDS = frozenset({"rule", "bayesian", "causal", "llm", "human"})
 
 
 class EngineUnavailableError(RuntimeError):
@@ -75,6 +76,8 @@ class EngineResolver:
                     f"{sorted(_VALID_KINDS)}."
                 )
             return kind
+        if process.causal is not None:
+            return "causal"
         if process.bayesian is not None:
             return "bayesian"
         if process.rules:
@@ -102,6 +105,14 @@ class EngineResolver:
                     "CONNECT_ONTORAG=true and ensure the server is reachable)."
                 )
             return BayesianMpeEngine(self._ontorag_client)
+        if kind == "causal":
+            if self._ontorag_client is None:
+                raise EngineUnavailableError(
+                    "Process requests the Causal engine, but no ontorag client "
+                    "is configured (requires a live ontorag v0.8; set "
+                    "CONNECT_ONTORAG=true and ensure the server is reachable)."
+                )
+            return CausalSimulationEngine(self._ontorag_client)
         if kind == "llm":
             if self._llm_client is None:
                 raise EngineUnavailableError(
