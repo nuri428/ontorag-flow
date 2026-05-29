@@ -100,10 +100,32 @@ class ProvOActivity(BaseModel):
     error: str | None = None
 
     def to_jsonld(self) -> dict[str, Any]:
-        """Render a minimal PROV-O JSON-LD node (richer export lands in v0.6)."""
+        """Render this activity as a PROV-O JSON-LD node.
+
+        Emits the full ``prov:Activity`` vocabulary so that the audit trail
+        answers the forensic "who changed what, when, why" question:
+
+        * ``prov:wasAssociatedWith`` — the responsible agent;
+        * ``prov:startedAtTime`` / ``prov:endedAtTime`` — the timing window;
+        * ``prov:used`` — the inputs (parameters) the activity consumed;
+        * ``prov:generated`` — the outputs the activity produced (this is the
+          inverse of ``prov:wasGeneratedBy``, kept as an inline mapping here;
+          :mod:`ontorag_flow.core.provenance` promotes these to first-class
+          ``dcat:Dataset`` nodes on export);
+        * ``prov:wasInformedBy`` — the prior activity in the case, forming the
+          causal chain.
+
+        Tolerant of ``None`` timestamps, agent, and causal links so partially
+        populated activities still serialize cleanly.
+        """
 
         node: dict[str, Any] = {
-            "@context": {"prov": "http://www.w3.org/ns/prov#"},
+            "@context": {
+                "prov": "http://www.w3.org/ns/prov#",
+                "dcat": "http://www.w3.org/ns/dcat#",
+                "xsd": "http://www.w3.org/2001/XMLSchema#",
+                "ontoragflow": "urn:ontorag-flow:",
+            },
             "@id": self.activity_uri,
             "@type": "prov:Activity",
             "prov:wasAssociatedWith": self.agent,
@@ -112,6 +134,8 @@ class ProvOActivity(BaseModel):
             "ontoragflow:action": self.action_uri,
             "ontoragflow:success": self.success,
         }
+        if self.case_uri is not None:
+            node["ontoragflow:case"] = self.case_uri
         if self.started_at is not None:
             node["prov:startedAtTime"] = self.started_at.isoformat()
         if self.ended_at is not None:

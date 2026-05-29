@@ -26,6 +26,7 @@ from ontorag_flow.core.action import Action, BaseAction
 from ontorag_flow.core.case_manager import CaseManager, CaseManagerError
 from ontorag_flow.core.executor import ActionExecutor, ActionValidationError
 from ontorag_flow.core.process import ProcessParseError, load_process
+from ontorag_flow.core.provenance import ExportFormat, render
 from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.core.state import EMPTY_STATE
 from ontorag_flow.engines.rule import RuleEngine
@@ -46,6 +47,11 @@ app.add_typer(process_app, name="process")
 
 case_app = typer.Typer(help="Create, inspect, and advance cases.", no_args_is_help=True)
 app.add_typer(case_app, name="case")
+
+audit_app = typer.Typer(
+    help="Inspect and export the PROV-O audit trail.", no_args_is_help=True
+)
+app.add_typer(audit_app, name="audit")
 
 console = Console()
 
@@ -324,7 +330,60 @@ def case_execute(
         console.print("[green]Goal reached — case closed.[/]")
 
 
+# --- audit commands --------------------------------------------------------
+
+
+@audit_app.command("show")
+def audit_show(
+    case_uri: str = typer.Argument(..., help="Case URI whose audit trail to show."),
+) -> None:
+    """Show the PROV-O activities recorded for a case."""
+
+    activities = asyncio.run(_with_store(lambda s: s.list_by_case(case_uri)))
+    if not activities:
+        console.print(f"[yellow]No audit activities for case[/] {case_uri}")
+        return
+    table = Table(title=f"Audit trail — {case_uri}")
+    table.add_column("Action", style="cyan", no_wrap=True)
+    table.add_column("Agent", style="magenta")
+    table.add_column("Started")
+    table.add_column("Result", justify="center")
+    for activity in activities:
+        mark = "[green]ok[/]" if activity.success else "[red]fail[/]"
+        started = activity.started_at.isoformat() if activity.started_at else "—"
+        table.add_row(activity.action_uri, activity.agent or "—", started, mark)
+    console.print(table)
+
+
+@audit_app.command("export")
+def audit_export(
+    case_uri: str = typer.Argument(..., help="Case URI whose trail to export."),
+    fmt: ExportFormat = typer.Option(
+        "jsonld",
+        "--format",
+        "-f",
+        help="Export format: jsonld or ttl.",
+    ),
+) -> None:
+    """Export a case's PROV-O trail to stdout as JSON-LD or Turtle."""
+
+    activities = asyncio.run(_with_store(lambda s: s.list_by_case(case_uri)))
+    # Logs go to stderr, so stdout carries only the rendered document.
+    console.print(render(activities, fmt), markup=False, highlight=False)
+
+
 # --- helpers ---------------------------------------------------------------
+
+
+async def _with_store(fn):
+    """Open a SQLite store, run ``fn(store)``, then close it."""
+
+    store = SqliteStore(get_settings().db_path)
+    await store.connect()
+    try:
+        return await fn(store)
+    finally:
+        await store.close()
 
 
 async def _with_manager(fn):

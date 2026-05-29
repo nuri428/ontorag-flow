@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from ontorag_flow import __version__
-from ontorag_flow.api.routes import actions, cases, health, processes
+from ontorag_flow.api.routes import actions, audit, cases, health, processes
 from ontorag_flow.config import get_settings
 from ontorag_flow.core.executor import ActionExecutor
 from ontorag_flow.core.case_manager import CaseManager
@@ -83,6 +83,7 @@ def create_app(
     app.include_router(actions.router)
     app.include_router(processes.router)
     app.include_router(cases.router)
+    app.include_router(audit.router)
 
     if mount_mcp:
         _mount_mcp(app)
