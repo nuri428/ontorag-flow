@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Actions — ontorag-flow{% endblock %}
+{% block content %}
+<h1>Action library</h1>
+<p class="muted">{{ actions | length }} registered action(s).</p>
+
+<table>
+  <thead><tr><th>URI</th><th>Name</th><th>Side effects</th><th>Params</th></tr></thead>
+  <tbody>
+  {% for action in actions %}
+    <tr>
+      <td class="uri">{{ action.uri }}</td>
+      <td>{{ action.name }}<br><span class="muted">{{ action.description }}</span></td>
+      <td>
+        {% for effect in action.side_effects %}<span class="badge">{{ effect }}</span> {% endfor %}
+      </td>
+      <td><code>{{ action.params | tojson }}</code></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

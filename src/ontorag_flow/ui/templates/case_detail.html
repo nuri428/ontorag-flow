@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ case.case_uri }} — ontorag-flow{% endblock %}
+{% block content %}
+<h1>Case <code class="uri">{{ case.case_uri }}</code></h1>
+
+<dl class="kv">
+  <dt>Process</dt><dd class="uri">{{ case.process_uri }}</dd>
+  <dt>Status</dt><dd><span class="badge {{ case.status.value }}">{{ case.status.value }}</span></dd>
+  <dt>Created</dt><dd>{{ case.created_at.isoformat() }}</dd>
+  <dt>Updated</dt><dd>{{ case.updated_at.isoformat() }}</dd>
+</dl>
+
+<h2>State</h2>
+<pre>properties: {{ case.state.properties | tojson(indent=2) }}
+goal:       {{ case.state.goal | tojson(indent=2) if case.state.goal else 'null' }}</pre>
+
+<h2>Decision engine proposals</h2>
+{% if proposals_error %}
+  <div class="callout">{{ proposals_error }}</div>
+{% elif not proposals %}
+  <div class="callout empty">The engine returned no proposals for the current state.</div>
+{% else %}
+<table>
+  <thead><tr><th>Action</th><th>Confidence</th><th>Params</th><th>Why</th><th>By</th></tr></thead>
+  <tbody>
+  {% for proposal in proposals %}
+    <tr>
+      <td class="uri">{{ proposal.action_uri }}</td>
+      <td>
+        {% if proposal.confidence is not none %}
+          <span class="confidence-bar"><span style="width: {{ (proposal.confidence * 100) | round(0) }}%"></span></span>
+          {{ '%.2f' | format(proposal.confidence) }}
+        {% else %}—{% endif %}
+      </td>
+      <td><code>{{ proposal.params | tojson }}</code></td>
+      <td>{{ proposal.rationale or '—' }}</td>
+      <td><span class="badge">{{ proposal.proposed_by or '—' }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>History ({{ case.history | length }} event(s)) — <a href="/ui/cases/{{ case.case_uri }}/audit">full audit trail →</a></h2>
+{% if not case.history %}
+  <p class="muted">No events yet.</p>
+{% else %}
+<table>
+  <thead><tr><th>At</th><th>Action</th><th>Outcome</th><th>Activity</th></tr></thead>
+  <tbody>
+  {% for event in case.history %}
+    <tr>
+      <td>{{ event.at.isoformat() }}</td>
+      <td class="uri">{{ event.action_uri }}</td>
+      <td>{% if event.success %}<span class="badge closed">ok</span>{% else %}<span class="badge failed">fail</span>{% endif %}</td>
+      <td class="uri">{{ event.activity_uri }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Audit — {{ case_uri }}{% endblock %}
+{% block content %}
+<h1>Audit trail</h1>
+<p class="muted">case: <code class="uri">{{ case_uri }}</code> — <a href="/ui/cases/{{ case_uri }}">back to case</a></p>
+<p class="muted">{{ activities | length }} PROV-O activity record(s).</p>
+
+{% if not activities %}
+  <div class="callout empty">No activities recorded for this case.</div>
+{% else %}
+<table>
+  <thead><tr>
+    <th>Activity</th><th>Action</th><th>Agent</th><th>Started</th><th>Ended</th>
+    <th>Used (inputs)</th><th>Generated (outputs)</th><th>Informed by</th><th>Status</th>
+  </tr></thead>
+  <tbody>
+  {% for activity in activities %}
+    <tr>
+      <td class="uri">{{ activity.activity_uri }}</td>
+      <td class="uri">{{ activity.action_uri }}</td>
+      <td class="uri">{{ activity.agent or '—' }}</td>
+      <td>{{ activity.started_at.isoformat() if activity.started_at else '—' }}</td>
+      <td>{{ activity.ended_at.isoformat() if activity.ended_at else '—' }}</td>
+      <td><code>{{ activity.used | tojson }}</code></td>
+      <td><code>{{ activity.generated | tojson }}</code></td>
+      <td class="uri">{{ activity.informed_by or '—' }}</td>
+      <td>
+        {% if activity.success %}<span class="badge closed">ok</span>
+        {% else %}<span class="badge failed">fail</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

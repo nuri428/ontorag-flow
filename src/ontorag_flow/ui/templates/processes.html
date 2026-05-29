@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Processes — ontorag-flow{% endblock %}
+{% block content %}
+<h1>Processes</h1>
+<p class="muted">{{ processes | length }} process(es).</p>
+
+{% if not processes %}
+  <div class="callout empty">No processes loaded. Load one with <code>ontorag-flow process load &lt;file&gt;</code>.</div>
+{% else %}
+<table>
+  <thead><tr><th>URI</th><th>Name</th><th>Engine</th><th>Allowed actions</th><th>Goal</th></tr></thead>
+  <tbody>
+  {% for process in processes %}
+    <tr>
+      <td class="uri">{{ process.process_uri }}</td>
+      <td>{{ process.name }}</td>
+      <td>{{ process.engine or '(inferred)' }}</td>
+      <td>{{ process.allowed_actions | length }}</td>
+      <td><code>{{ process.goal | tojson if process.goal else '—' }}</code></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

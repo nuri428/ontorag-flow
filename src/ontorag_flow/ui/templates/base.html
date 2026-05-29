@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}ontorag-flow{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/ui/static/app.css">
+</head>
+<body>
+  <header class="top">
+    <span class="brand"><a href="/ui/">ontorag-flow</a></span>
+    <nav>
+      <a href="/ui/">Cases</a>
+      <a href="/ui/processes">Processes</a>
+      <a href="/ui/actions">Actions</a>
+    </nav>
+    <span class="version">v{{ version }}</span>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>Kinetic layer over ontorag — read-only inspector.</footer>
+</body>
+</html>

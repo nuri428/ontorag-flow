@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Cases — ontorag-flow{% endblock %}
+{% block content %}
+<h1>Cases</h1>
+<p class="muted">{{ cases | length }} case(s){% if status %} with status <code>{{ status }}</code>{% endif %}.</p>
+
+<div class="filter-bar">
+  <a href="/ui/" class="{{ '' if status else 'active' }}">all</a>
+  {% for option in ('open', 'suspended', 'closed', 'failed') %}
+    <a href="/ui/?status={{ option }}" class="{{ 'active' if status == option else '' }}">{{ option }}</a>
+  {% endfor %}
+</div>
+
+{% if not cases %}
+  <div class="callout empty">No cases yet. Create one with <code>ontorag-flow case create &lt;process_uri&gt;</code>.</div>
+{% else %}
+<table>
+  <thead><tr><th>Case</th><th>Process</th><th>Status</th><th>Properties</th><th>History</th></tr></thead>
+  <tbody>
+  {% for case in cases %}
+    <tr>
+      <td class="uri"><a href="/ui/cases/{{ case.case_uri }}">{{ case.case_uri }}</a></td>
+      <td class="uri">{{ case.process_uri }}</td>
+      <td><span class="badge {{ case.status.value }}">{{ case.status.value }}</span></td>
+      <td><code>{{ case.state.properties | tojson }}</code></td>
+      <td>{{ case.history | length }} event(s)</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

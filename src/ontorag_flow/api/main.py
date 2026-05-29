@@ -21,6 +21,8 @@ from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.engines.selection import EngineResolver
 from ontorag_flow.log import get_logger
 from ontorag_flow.stores.sqlite import SqliteStore
+from ontorag_flow.ui.routes import router as ui_router
+from ontorag_flow.ui.routes import static_files as ui_static_files
 
 logger = get_logger(__name__)
 
@@ -94,6 +96,8 @@ def create_app(
     app.include_router(processes.router)
     app.include_router(cases.router)
     app.include_router(audit.router)
+    app.include_router(ui_router)
+    app.mount("/ui/static", ui_static_files, name="ui-static")
 
     if mount_mcp:
         _mount_mcp(app)
