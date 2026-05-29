@@ -80,6 +80,17 @@ def test_propose_next_action_ranks_proposals(client: TestClient) -> None:
     assert proposals[0]["proposed_by"] == "RuleEngine"
 
 
+def test_propose_llm_engine_unavailable_409(client: TestClient) -> None:
+    # The default app configures no LLM client, so a process that asks for the
+    # LLM engine cannot propose — the resolver raises and the route maps it to 409.
+    process = {**PROCESS, "process_uri": "urn:p:llm", "engine": "llm"}
+    client.post("/processes", json=process)
+    case_uri = client.post("/cases", json={"process_uri": "urn:p:llm"}).json()["case_uri"]
+
+    resp = client.post(f"/cases/{case_uri}/propose")
+    assert resp.status_code == 409
+
+
 def test_execute_disallowed_action_409(client: TestClient) -> None:
     client.post("/processes", json=PROCESS)
     case_uri = client.post("/cases", json={"process_uri": "urn:p:triage"}).json()["case_uri"]

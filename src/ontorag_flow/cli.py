@@ -30,7 +30,7 @@ from ontorag_flow.core.process_rdf import load_process_rdf
 from ontorag_flow.core.provenance import ExportFormat, render
 from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.core.state import EMPTY_STATE
-from ontorag_flow.engines.rule import RuleEngine
+from ontorag_flow.engines.selection import EngineResolver, EngineUnavailableError
 from ontorag_flow.log import configure_logging
 from ontorag_flow.stores.sqlite import SqliteStore
 
@@ -281,7 +281,7 @@ def case_propose_next(
 
     try:
         proposals = asyncio.run(_with_manager(lambda m: m.propose_next(case_uri)))
-    except CaseManagerError as exc:
+    except (CaseManagerError, EngineUnavailableError) as exc:
         console.print(f"[red]{type(exc).__name__}:[/] {exc}")
         raise typer.Exit(code=1) from exc
 
@@ -389,23 +389,64 @@ async def _with_store(fn):
 
 
 async def _with_manager(fn):
-    """Open a SQLite-backed CaseManager, run ``fn(manager)``, then close."""
+    """Open a SQLite-backed CaseManager, run ``fn(manager)``, then close.
+
+    Wires an :class:`EngineResolver` so the right decision engine is chosen per
+    process. The LLM engine is enabled when ``LLM_PROVIDER`` is set; the Bayesian
+    engine when ``CONNECT_ONTORAG`` is true and the server is reachable.
+    """
 
     settings = get_settings()
     store = SqliteStore(settings.db_path)
     await store.connect()
+    ontorag_client = None
     try:
+        registry = default_registry()
+        ontorag_client = await _cli_ontorag(settings)
+        resolver = EngineResolver(
+            registry=registry,
+            ontorag_client=ontorag_client,
+            llm_client=_cli_llm(settings),
+        )
         executor = ActionExecutor(audit_store=store, agent=settings.agent_id)
         manager = CaseManager(
             case_store=store,
             process_store=store,
             executor=executor,
-            registry=default_registry(),
-            engine_factory=RuleEngine.from_process,
+            registry=registry,
+            engine_factory=resolver.for_process,
         )
         return await fn(manager)
     finally:
+        if ontorag_client is not None:
+            await ontorag_client.aclose()
         await store.close()
+
+
+def _cli_llm(settings):  # type: ignore[no-untyped-def]
+    """Build an LLM client from settings, or None if no provider is configured."""
+
+    if not settings.llm_provider:
+        return None
+    from ontorag_flow.engines.llm_providers import make_llm_client
+
+    return make_llm_client(settings.llm_provider, settings.llm_model)
+
+
+async def _cli_ontorag(settings):  # type: ignore[no-untyped-def]
+    """Connect an ontorag client if CONNECT_ONTORAG is set; None otherwise."""
+
+    if not settings.connect_ontorag:
+        return None
+    from ontorag_flow.ontorag_client import OntoragClient, OntoragClientError
+
+    client = OntoragClient(settings.ontorag_mcp_url)
+    try:
+        await client.connect()
+    except OntoragClientError as exc:
+        console.print(f"[yellow]ontorag unreachable; Bayesian engine disabled:[/] {exc}")
+        return None
+    return client
 
 
 def _parse_params(pairs: list[str]) -> dict[str, Any]:

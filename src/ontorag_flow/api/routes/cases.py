@@ -20,6 +20,7 @@ from ontorag_flow.core.case_manager import (
     ProcessNotFoundError,
 )
 from ontorag_flow.core.executor import ActionValidationError
+from ontorag_flow.engines.selection import EngineUnavailableError
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -101,7 +102,7 @@ async def propose_next_action(
         return await manager.propose_next(case_uri)
     except (CaseNotFoundError, ProcessNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except NoEngineConfiguredError as exc:
+    except (NoEngineConfiguredError, EngineUnavailableError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 

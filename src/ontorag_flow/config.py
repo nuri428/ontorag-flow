@@ -45,6 +45,22 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8100, alias="API_PORT")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
+    # Decision-engine wiring (see EngineResolver). The rule engine always works;
+    # the others are enabled only when their backing client is configured.
+    llm_provider: str | None = Field(
+        default=None,
+        alias="LLM_PROVIDER",
+        description="LLM provider for LlmAgentEngine: anthropic | openai | ollama.",
+    )
+    llm_model: str | None = Field(
+        default=None, alias="LLM_MODEL", description="LLM model override."
+    )
+    connect_ontorag: bool = Field(
+        default=False,
+        alias="CONNECT_ONTORAG",
+        description="Open an ontorag MCP connection at startup to enable the Bayesian engine.",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

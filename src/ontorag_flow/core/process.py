@@ -50,6 +50,14 @@ class ProcessDefinition(BaseModel):
         default=None,
         description="Optional Bayesian decision config interpreted by BayesianMpeEngine.",
     )
+    engine: str | None = Field(
+        default=None,
+        description=(
+            "Which decision engine drives next-action selection: 'rule', "
+            "'bayesian', or 'llm'. If unset, it is inferred from the config "
+            "present (bayesian block -> bayesian, rules -> rule)."
+        ),
+    )
 
     def allows(self, action_uri: str) -> bool:
         """Whether an action is permitted in this process."""
