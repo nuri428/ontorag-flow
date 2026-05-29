@@ -19,6 +19,8 @@ class AuditStore(Protocol):
 
     async def list_all(self) -> list[ProvOActivity]: ...
 
+    async def list_by_case(self, case_uri: str) -> list[ProvOActivity]: ...
+
     async def get(self, activity_uri: str) -> ProvOActivity | None: ...
 
 
@@ -33,6 +35,9 @@ class InMemoryAuditStore:
 
     async def list_all(self) -> list[ProvOActivity]:
         return list(self._activities)
+
+    async def list_by_case(self, case_uri: str) -> list[ProvOActivity]:
+        return [a for a in self._activities if a.case_uri == case_uri]
 
     async def get(self, activity_uri: str) -> ProvOActivity | None:
         return next(

@@ -83,6 +83,9 @@ class ProvOActivity(BaseModel):
 
     activity_uri: str = Field(default_factory=_new_activity_uri)
     action_uri: str
+    case_uri: str | None = Field(
+        default=None, description="Case this activity belongs to, if any."
+    )
     agent: str | None = Field(default=None, description="prov:wasAssociatedWith")
     started_at: datetime | None = Field(default=None, description="prov:startedAtTime")
     ended_at: datetime | None = Field(default=None, description="prov:endedAtTime")

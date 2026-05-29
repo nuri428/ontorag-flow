@@ -2,7 +2,7 @@
 
 v0.1 scope: project ``init``, the ``action`` sub-app (list / register / run a
 single action — no cases yet), an ontorag connectivity ``status`` check, and
-``serve`` for the API.
+``serve`` for the API. v0.2 adds the ``process`` and ``case`` sub-apps.
 """
 
 from __future__ import annotations
@@ -23,10 +23,13 @@ from rich.table import Table
 from ontorag_flow import __version__
 from ontorag_flow.config import get_settings
 from ontorag_flow.core.action import Action, BaseAction
+from ontorag_flow.core.case_manager import CaseManager, CaseManagerError
 from ontorag_flow.core.executor import ActionExecutor, ActionValidationError
+from ontorag_flow.core.process import ProcessParseError, load_process
 from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.core.state import EMPTY_STATE
 from ontorag_flow.log import configure_logging
+from ontorag_flow.stores.sqlite import SqliteStore
 
 app = typer.Typer(
     name="ontorag-flow",
@@ -36,6 +39,12 @@ app = typer.Typer(
 )
 action_app = typer.Typer(help="Inspect, register, and run actions.", no_args_is_help=True)
 app.add_typer(action_app, name="action")
+
+process_app = typer.Typer(help="Load and inspect process definitions.", no_args_is_help=True)
+app.add_typer(process_app, name="process")
+
+case_app = typer.Typer(help="Create, inspect, and advance cases.", no_args_is_help=True)
+app.add_typer(case_app, name="case")
 
 console = Console()
 
@@ -166,7 +175,144 @@ def serve(
     )
 
 
+# --- process commands ------------------------------------------------------
+
+
+@process_app.command("load")
+def process_load(
+    path: Path = typer.Argument(..., help="Path to a process definition YAML file."),
+) -> None:
+    """Load a process definition from YAML and persist it."""
+
+    try:
+        process = load_process(path)
+    except ProcessParseError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+
+    asyncio.run(_with_manager(lambda m: m.register_process(process)))
+    console.print(
+        f"[green]Loaded process[/] {process.process_uri} "
+        f"({len(process.allowed_actions)} allowed action(s))."
+    )
+
+
+@process_app.command("list")
+def process_list() -> None:
+    """List persisted process definitions."""
+
+    processes = asyncio.run(_with_manager(lambda m: m.list_processes()))
+    if not processes:
+        console.print("[yellow]No processes loaded.[/]")
+        return
+    table = Table(title="Processes")
+    table.add_column("URI", style="cyan", no_wrap=True)
+    table.add_column("Name")
+    table.add_column("Allowed", justify="right")
+    table.add_column("Goal", style="magenta")
+    for process in processes:
+        table.add_row(
+            process.process_uri,
+            process.name,
+            str(len(process.allowed_actions)),
+            json.dumps(process.goal, default=str) if process.goal else "—",
+        )
+    console.print(table)
+
+
+# --- case commands ---------------------------------------------------------
+
+
+@case_app.command("create")
+def case_create(
+    process_uri: str = typer.Argument(..., help="Process URI governing the case."),
+    initial_state: list[str] = typer.Option(
+        [], "--initial-state", "-s", help="Seed property as key=value (JSON or string).",
+    ),
+) -> None:
+    """Create a new case from a process definition."""
+
+    state = _parse_params(initial_state)
+    try:
+        case = asyncio.run(
+            _with_manager(lambda m: m.create_case(process_uri, initial_state=state))
+        )
+    except CaseManagerError as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Created case[/] {case.case_uri}")
+
+
+@case_app.command("status")
+def case_status(
+    case_uri: str = typer.Argument(..., help="Case URI."),
+) -> None:
+    """Show a case's status, state, and history."""
+
+    case = asyncio.run(_with_manager(lambda m: m.get_case(case_uri)))
+    if case is None:
+        console.print(f"[red]No such case:[/] {case_uri}")
+        raise typer.Exit(code=1)
+    console.print(f"[bold]case:[/] {case.case_uri}")
+    console.print(f"[bold]process:[/] {case.process_uri}")
+    console.print(f"[bold]status:[/] {case.status.value}")
+    console.print(f"[bold]properties:[/] {json.dumps(case.state.properties, default=str)}")
+    console.print(f"[bold]goal:[/] {json.dumps(case.state.goal, default=str)}")
+    console.print(f"[bold]history:[/] {len(case.history)} event(s)")
+    for event in case.history:
+        mark = "[green]ok[/]" if event.success else "[red]fail[/]"
+        console.print(f"  - {event.action_uri} ({mark})")
+
+
+@case_app.command("execute")
+def case_execute(
+    case_uri: str = typer.Argument(..., help="Case URI."),
+    action_uri: str = typer.Argument(..., help="Action URI to execute."),
+    param: list[str] = typer.Option(
+        [], "--param", "-p", help="Action parameter as key=value (JSON or string).",
+    ),
+) -> None:
+    """Execute a chosen action against a case."""
+
+    params = _parse_params(param)
+    try:
+        case, outcome = asyncio.run(
+            _with_manager(lambda m: m.execute_action(case_uri, action_uri, params))
+        )
+    except ActionValidationError as exc:
+        console.print(f"[red]Validation failed:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    except CaseManagerError as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[bold]success:[/] {outcome.result.success}")
+    console.print(f"[bold]status:[/] {case.status.value}")
+    console.print(f"[bold]properties:[/] {json.dumps(case.state.properties, default=str)}")
+    if case.status.value == "closed":
+        console.print("[green]Goal reached — case closed.[/]")
+
+
 # --- helpers ---------------------------------------------------------------
+
+
+async def _with_manager(fn):
+    """Open a SQLite-backed CaseManager, run ``fn(manager)``, then close."""
+
+    settings = get_settings()
+    store = SqliteStore(settings.db_path)
+    await store.connect()
+    try:
+        executor = ActionExecutor(audit_store=store, agent=settings.agent_id)
+        manager = CaseManager(
+            case_store=store,
+            process_store=store,
+            executor=executor,
+            registry=default_registry(),
+        )
+        return await fn(manager)
+    finally:
+        await store.close()
 
 
 def _parse_params(pairs: list[str]) -> dict[str, Any]:

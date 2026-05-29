@@ -50,6 +50,16 @@ class CaseState(BaseModel):
         new_goal = result.goal_change if result.goal_change is not None else self.goal
         return self.model_copy(update={"properties": new_properties, "goal": new_goal})
 
+    def goal_reached(self) -> bool:
+        """Whether the current properties satisfy every goal predicate.
+
+        A state with no goal is never "reached" — there is nothing to satisfy.
+        """
+
+        if not self.goal:
+            return False
+        return all(self.properties.get(key) == value for key, value in self.goal.items())
+
 
 EMPTY_STATE: CaseState = CaseState()
 """A blank state, used by ``action run`` when no case exists yet."""

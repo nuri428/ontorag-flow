@@ -1,0 +1,21 @@
+# Sample process definition (v0.2).
+#
+# CMMN-inspired: it lists the *allowed* actions and the goal condition, but does
+# not prescribe an order. v0.2 uses only the domain-agnostic built-in actions;
+# domain actions (OrderLabTest, RecordSymptom, ...) and rule-driven next-action
+# selection arrive in later milestones.
+
+process_uri: "urn:ontorag-flow:process:medical-triage"
+name: "Medical Triage"
+
+allowed_actions:
+  - "urn:ontorag-flow:action:UpdateCaseProperty"
+  - "urn:ontorag-flow:action:SetGoal"
+
+# The case auto-closes once its state satisfies every predicate here.
+goal:
+  diagnosed: true
+
+# Default properties seeded into every new case of this process.
+initial_state:
+  triage_level: "unknown"

@@ -130,6 +130,7 @@ class ActionExecutor:
 
         activity = action.audit_record(result).model_copy(
             update={
+                "case_uri": state.case_uri,
                 "agent": self.agent,
                 "started_at": started_at,
                 "ended_at": ended_at,

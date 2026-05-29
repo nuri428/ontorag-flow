@@ -36,6 +36,11 @@ class Settings(BaseSettings):
         alias="AGENT_ID",
         description="Agent identity recorded as prov:wasAssociatedWith.",
     )
+    db_path: str = Field(
+        default="ontorag_flow.db",
+        alias="DATABASE_PATH",
+        description="SQLite file for case state, processes, and the audit log.",
+    )
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8100, alias="API_PORT")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
