@@ -1,9 +1,9 @@
-# Sample process definition (v0.2).
+# Sample process definition (v0.3).
 #
-# CMMN-inspired: it lists the *allowed* actions and the goal condition, but does
-# not prescribe an order. v0.2 uses only the domain-agnostic built-in actions;
-# domain actions (OrderLabTest, RecordSymptom, ...) and rule-driven next-action
-# selection arrive in later milestones.
+# CMMN-inspired: it lists the *allowed* actions, the goal condition, and a
+# decision table that the RuleEngine uses to *propose* (not execute) the next
+# action. v0.3 still uses only the domain-agnostic built-in actions; domain
+# actions (OrderLabTest, RecordSymptom, ...) arrive in later milestones.
 
 process_uri: "urn:ontorag-flow:process:medical-triage"
 name: "Medical Triage"
@@ -19,3 +19,43 @@ goal:
 # Default properties seeded into every new case of this process.
 initial_state:
   triage_level: "unknown"
+
+# Decision table. Each rule fires when every `when` condition matches the case
+# properties, proposing the `then` action. Conditions are scalars (equality) or
+# operator maps like {gte: 3}. Proposals are ranked by confidence, best first.
+rules:
+  - name: "Unassessed cases should be assessed first"
+    when:
+      triage_level: "unknown"
+    then:
+      action: "urn:ontorag-flow:action:UpdateCaseProperty"
+      params:
+        key: "triage_level"
+        value: "assessed"
+    confidence: 0.7
+    rationale: "Triage level is still unknown; assess before diagnosing."
+
+  - name: "High severity escalates assessment"
+    when:
+      triage_level: "unknown"
+      severity:
+        gte: 7
+    then:
+      action: "urn:ontorag-flow:action:UpdateCaseProperty"
+      params:
+        key: "triage_level"
+        value: "urgent"
+    confidence: 0.95
+    rationale: "Severity >= 7 warrants urgent assessment over routine."
+
+  - name: "Assessed cases can be marked diagnosed"
+    when:
+      triage_level:
+        in: ["assessed", "urgent"]
+    then:
+      action: "urn:ontorag-flow:action:UpdateCaseProperty"
+      params:
+        key: "diagnosed"
+        value: true
+    confidence: 0.6
+    rationale: "Assessment complete; diagnosis closes the case goal."

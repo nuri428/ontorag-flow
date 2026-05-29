@@ -10,9 +10,13 @@ from ontorag_flow.core.case_manager import (
     CaseClosedError,
     CaseManager,
     CaseNotFoundError,
+    NoEngineConfiguredError,
     ProcessNotFoundError,
 )
+from ontorag_flow.core.executor import ActionExecutor
 from ontorag_flow.core.process import ProcessDefinition
+from ontorag_flow.core.registry import default_registry
+from ontorag_flow.stores.sqlite import SqliteStore
 
 UPDATE = "urn:ontorag-flow:action:UpdateCaseProperty"
 SET_GOAL = "urn:ontorag-flow:action:SetGoal"
@@ -23,6 +27,14 @@ TRIAGE = ProcessDefinition(
     allowed_actions=[UPDATE, SET_GOAL],
     goal={"diagnosed": True},
     initial_state={"triage_level": "unknown"},
+    rules=[
+        {
+            "name": "assess unknown",
+            "when": {"triage_level": "unknown"},
+            "then": {"action": UPDATE, "params": {"key": "triage_level", "value": "assessed"}},
+            "confidence": 0.7,
+        }
+    ],
 )
 
 
@@ -90,3 +102,33 @@ async def test_action_not_allowed(case_manager_sqlite: CaseManager) -> None:
 async def test_execute_unknown_case(case_manager_sqlite: CaseManager) -> None:
     with pytest.raises(CaseNotFoundError):
         await case_manager_sqlite.execute_action("urn:c:none", SET_GOAL, {"predicate": "x"})
+
+
+async def test_propose_next_returns_ranked_proposals(
+    case_manager_sqlite: CaseManager,
+) -> None:
+    await case_manager_sqlite.register_process(TRIAGE)
+    case = await case_manager_sqlite.create_case("urn:p:triage")
+
+    proposals = await case_manager_sqlite.propose_next(case.case_uri)
+
+    assert len(proposals) == 1
+    assert proposals[0].action_uri == UPDATE
+    assert proposals[0].params == {"key": "triage_level", "value": "assessed"}
+    assert proposals[0].proposed_by == "RuleEngine"
+
+
+async def test_propose_next_without_engine_raises(sqlite_store: SqliteStore) -> None:
+    manager = CaseManager(
+        case_store=sqlite_store,
+        process_store=sqlite_store,
+        executor=ActionExecutor(audit_store=sqlite_store),
+        registry=default_registry(),
+    )
+    await manager.register_process(
+        ProcessDefinition(process_uri="urn:p:n", name="N", allowed_actions=[])
+    )
+    case = await manager.create_case("urn:p:n")
+
+    with pytest.raises(NoEngineConfiguredError):
+        await manager.propose_next(case.case_uri)

@@ -8,9 +8,10 @@ to run next is the job of a decision engine (v0.3+). Here the caller chooses.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
+from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case, CaseStatus
 from ontorag_flow.core.executor import ActionExecutor, ExecutionOutcome
 from ontorag_flow.core.process import ProcessDefinition
@@ -18,6 +19,14 @@ from ontorag_flow.core.registry import ActionRegistry
 from ontorag_flow.core.state import CaseState
 from ontorag_flow.log import get_logger
 from ontorag_flow.stores.base import CaseStore, ProcessStore
+
+if TYPE_CHECKING:
+    from ontorag_flow.engines.base import DecisionEngine
+
+# A factory builds a decision engine for a given process (so per-process rules
+# are honoured). Injected by the composition root to keep core free of any
+# runtime dependency on the engines layer.
+EngineFactory = Callable[[ProcessDefinition], "DecisionEngine"]
 
 logger = get_logger(__name__)
 
@@ -46,6 +55,10 @@ class CaseClosedError(CaseManagerError):
     """The case is not open, so it cannot accept further actions."""
 
 
+class NoEngineConfiguredError(CaseManagerError):
+    """No decision engine factory was provided, so proposals are unavailable."""
+
+
 def new_case_uri() -> str:
     """Mint a fresh case URI."""
 
@@ -62,11 +75,13 @@ class CaseManager:
         process_store: ProcessStore,
         executor: ActionExecutor,
         registry: ActionRegistry,
+        engine_factory: EngineFactory | None = None,
     ) -> None:
         self._cases = case_store
         self._processes = process_store
         self._executor = executor
         self._registry = registry
+        self._engine_factory = engine_factory
 
     # --- process facade ---------------------------------------------------
 
@@ -95,6 +110,33 @@ class CaseManager:
         process_uri: str | None = None,
     ) -> list[Case]:
         return await self._cases.find_cases(status=status, process_uri=process_uri)
+
+    # --- decisions --------------------------------------------------------
+
+    async def propose_next(self, case_uri: str) -> list[ActionProposal]:
+        """Ask the decision engine for ranked next-action proposals.
+
+        This never executes anything — recommendation is not execution.
+
+        Raises:
+            NoEngineConfiguredError: If no engine factory was provided.
+            CaseNotFoundError, ProcessNotFoundError: As applicable.
+        """
+
+        if self._engine_factory is None:
+            raise NoEngineConfiguredError(
+                "No decision engine configured for this case manager."
+            )
+
+        case = await self._cases.get_case(case_uri)
+        if case is None:
+            raise CaseNotFoundError(case_uri)
+        process = await self._processes.get_process(case.process_uri)
+        if process is None:
+            raise ProcessNotFoundError(case.process_uri)
+
+        engine = self._engine_factory(process)
+        return await engine.propose_next(case, process)
 
     # --- case writes ------------------------------------------------------
 

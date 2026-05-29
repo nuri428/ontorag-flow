@@ -12,6 +12,7 @@ from ontorag_flow.core.audit import InMemoryAuditStore
 from ontorag_flow.core.case_manager import CaseManager
 from ontorag_flow.core.executor import ActionExecutor
 from ontorag_flow.core.registry import default_registry
+from ontorag_flow.engines.rule import RuleEngine
 from ontorag_flow.stores.sqlite import SqliteStore
 
 
@@ -53,4 +54,5 @@ async def case_manager_sqlite(sqlite_store: SqliteStore) -> CaseManager:
         process_store=sqlite_store,
         executor=executor,
         registry=default_registry(),
+        engine_factory=RuleEngine.from_process,
     )

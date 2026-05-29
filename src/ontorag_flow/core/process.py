@@ -39,6 +39,13 @@ class ProcessDefinition(BaseModel):
         default_factory=dict,
         description="Default properties seeded into a new case's state.",
     )
+    rules: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Opaque decision-table rules interpreted by a decision engine "
+            "(e.g. the RuleEngine). Kept untyped here so core stays engine-agnostic."
+        ),
+    )
 
     def allows(self, action_uri: str) -> bool:
         """Whether an action is permitted in this process."""

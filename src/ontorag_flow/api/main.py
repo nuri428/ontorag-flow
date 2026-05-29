@@ -18,6 +18,7 @@ from ontorag_flow.config import get_settings
 from ontorag_flow.core.executor import ActionExecutor
 from ontorag_flow.core.case_manager import CaseManager
 from ontorag_flow.core.registry import ActionRegistry, default_registry
+from ontorag_flow.engines.rule import RuleEngine
 from ontorag_flow.log import get_logger
 from ontorag_flow.stores.sqlite import SqliteStore
 
@@ -62,6 +63,7 @@ def create_app(
             process_store=active_store,
             executor=executor,
             registry=resolved_registry,
+            engine_factory=RuleEngine.from_process,
         )
         try:
             yield

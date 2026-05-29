@@ -28,6 +28,7 @@ from ontorag_flow.core.executor import ActionExecutor, ActionValidationError
 from ontorag_flow.core.process import ProcessParseError, load_process
 from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.core.state import EMPTY_STATE
+from ontorag_flow.engines.rule import RuleEngine
 from ontorag_flow.log import configure_logging
 from ontorag_flow.stores.sqlite import SqliteStore
 
@@ -264,6 +265,36 @@ def case_status(
         console.print(f"  - {event.action_uri} ({mark})")
 
 
+@case_app.command("propose-next")
+def case_propose_next(
+    case_uri: str = typer.Argument(..., help="Case URI."),
+) -> None:
+    """Show the decision engine's ranked next-action proposals (no execution)."""
+
+    try:
+        proposals = asyncio.run(_with_manager(lambda m: m.propose_next(case_uri)))
+    except CaseManagerError as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if not proposals:
+        console.print("[yellow]No action proposed for the current state.[/]")
+        return
+    table = Table(title="Proposals (best first)")
+    table.add_column("Action", style="cyan", no_wrap=True)
+    table.add_column("Conf.", justify="right")
+    table.add_column("Params", style="magenta")
+    table.add_column("Why")
+    for proposal in proposals:
+        table.add_row(
+            proposal.action_uri,
+            f"{proposal.confidence:.2f}" if proposal.confidence is not None else "—",
+            json.dumps(proposal.params, default=str) if proposal.params else "—",
+            proposal.rationale or "—",
+        )
+    console.print(table)
+
+
 @case_app.command("execute")
 def case_execute(
     case_uri: str = typer.Argument(..., help="Case URI."),
@@ -309,6 +340,7 @@ async def _with_manager(fn):
             process_store=store,
             executor=executor,
             registry=default_registry(),
+            engine_factory=RuleEngine.from_process,
         )
         return await fn(manager)
     finally:

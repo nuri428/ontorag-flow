@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from rich.console import Console
 from rich.logging import RichHandler
 
 _CONFIGURED = False
@@ -11,6 +12,9 @@ _CONFIGURED = False
 
 def configure_logging(level: str = "INFO") -> None:
     """Install a Rich-backed handler on the root logger (idempotent).
+
+    Logs go to stderr so that stdout carries only command output — keeping the
+    CLI scriptable (``ontorag-flow case create ... | ...``).
 
     Args:
         level: A standard logging level name (e.g. ``"INFO"``, ``"DEBUG"``).
@@ -24,7 +28,13 @@ def configure_logging(level: str = "INFO") -> None:
         level=level.upper(),
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[RichHandler(rich_tracebacks=True, show_path=False)],
+        handlers=[
+            RichHandler(
+                console=Console(stderr=True),
+                rich_tracebacks=True,
+                show_path=False,
+            )
+        ],
     )
     _CONFIGURED = True
 

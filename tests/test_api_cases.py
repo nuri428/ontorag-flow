@@ -19,6 +19,14 @@ PROCESS = {
     "allowed_actions": [UPDATE],
     "goal": {"diagnosed": True},
     "initial_state": {"triage_level": "unknown"},
+    "rules": [
+        {
+            "name": "assess unknown",
+            "when": {"triage_level": "unknown"},
+            "then": {"action": UPDATE, "params": {"key": "triage_level", "value": "assessed"}},
+            "confidence": 0.7,
+        }
+    ],
 }
 
 
@@ -58,6 +66,18 @@ def test_full_case_flow_closes_on_goal(client: TestClient) -> None:
 def test_create_case_unknown_process_404(client: TestClient) -> None:
     resp = client.post("/cases", json={"process_uri": "urn:p:none"})
     assert resp.status_code == 404
+
+
+def test_propose_next_action_ranks_proposals(client: TestClient) -> None:
+    client.post("/processes", json=PROCESS)
+    case_uri = client.post("/cases", json={"process_uri": "urn:p:triage"}).json()["case_uri"]
+
+    resp = client.post(f"/cases/{case_uri}/propose")
+    assert resp.status_code == 200
+    proposals = resp.json()
+    assert len(proposals) == 1
+    assert proposals[0]["action_uri"] == UPDATE
+    assert proposals[0]["proposed_by"] == "RuleEngine"
 
 
 def test_execute_disallowed_action_409(client: TestClient) -> None:
