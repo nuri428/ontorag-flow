@@ -37,8 +37,10 @@ def default_registry() -> ActionRegistry:
     """Return a registry pre-populated with the built-in action library."""
 
     from ontorag_flow.actions.case_state import SetGoal, UpdateCaseProperty
+    from ontorag_flow.actions.human import RequestHumanReview
 
     registry = ActionRegistry()
     registry.register(UpdateCaseProperty())
     registry.register(SetGoal())
+    registry.register(RequestHumanReview())
     return registry

@@ -58,6 +58,13 @@ class ProcessDefinition(BaseModel):
             "present (bayesian block -> bayesian, rules -> rule)."
         ),
     )
+    constraints: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "CMMN-style ordering constraints enforced at execute time. "
+            "Shape: {'mutex': [[uri_a, uri_b], ...], 'requires': {uri: [prereq_uri, ...]}}."
+        ),
+    )
 
     def allows(self, action_uri: str) -> bool:
         """Whether an action is permitted in this process."""

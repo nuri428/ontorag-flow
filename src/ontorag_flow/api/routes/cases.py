@@ -16,6 +16,9 @@ from ontorag_flow.core.case_manager import (
     CaseClosedError,
     CaseManager,
     CaseNotFoundError,
+    CaseStateTransitionError,
+    CompensationError,
+    ConstraintViolationError,
     NoEngineConfiguredError,
     ProcessNotFoundError,
 )
@@ -124,7 +127,7 @@ async def execute_action(
         )
     except (CaseNotFoundError, ProcessNotFoundError, ActionNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (CaseClosedError, ActionNotAllowedError) as exc:
+    except (CaseClosedError, ActionNotAllowedError, ConstraintViolationError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ActionValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -132,3 +135,74 @@ async def execute_action(
     return ExecuteActionResponse(
         case=case, result=outcome.result, activity=outcome.activity
     )
+
+
+class CompensateRequest(BaseModel):
+    target_activity_uri: str | None = None
+
+
+class ForkRequest(BaseModel):
+    new_uri: str | None = None
+    copy_history: bool = True
+
+
+@router.post("/{case_uri}/compensate", operation_id="compensate_case", response_model=Case)
+async def compensate_case(
+    case_uri: str,
+    body: CompensateRequest = CompensateRequest(),
+    manager: CaseManager = Depends(get_case_manager),
+) -> Case:
+    """Undo a tail of executed actions on a case (saga compensation)."""
+
+    try:
+        return await manager.compensate(
+            case_uri, target_activity_uri=body.target_activity_uri
+        )
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CompensationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/{case_uri}/suspend", operation_id="suspend_case", response_model=Case)
+async def suspend_case(
+    case_uri: str, manager: CaseManager = Depends(get_case_manager)
+) -> Case:
+    """Pause an open case."""
+
+    try:
+        return await manager.suspend(case_uri)
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseStateTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/{case_uri}/resume", operation_id="resume_case", response_model=Case)
+async def resume_case(
+    case_uri: str, manager: CaseManager = Depends(get_case_manager)
+) -> Case:
+    """Reopen a suspended case."""
+
+    try:
+        return await manager.resume(case_uri)
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CaseStateTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/{case_uri}/fork", operation_id="fork_case", response_model=Case)
+async def fork_case(
+    case_uri: str,
+    body: ForkRequest = ForkRequest(),
+    manager: CaseManager = Depends(get_case_manager),
+) -> Case:
+    """Fork a case into a new one (same process, copied state/history)."""
+
+    try:
+        return await manager.fork(
+            case_uri, new_uri=body.new_uri, copy_history=body.copy_history
+        )
+    except CaseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

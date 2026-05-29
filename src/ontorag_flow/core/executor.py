@@ -131,6 +131,8 @@ class ActionExecutor:
         activity = action.audit_record(result).model_copy(
             update={
                 "case_uri": state.case_uri,
+                "state_before": dict(state.properties),
+                "goal_before": dict(state.goal) if state.goal is not None else None,
                 "agent": self.agent,
                 "started_at": started_at,
                 "ended_at": ended_at,

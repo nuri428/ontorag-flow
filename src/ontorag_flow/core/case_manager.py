@@ -11,8 +11,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
-from ontorag_flow.core.action import ActionProposal
-from ontorag_flow.core.case import Case, CaseStatus
+from ontorag_flow.core.action import (
+    ActionProposal,
+    ActionResult,
+    ProvOActivity,
+    SideEffectKind,
+    utcnow,
+)
+from ontorag_flow.core.case import Case, CaseEvent, CaseStatus
 from ontorag_flow.core.executor import ActionExecutor, ExecutionOutcome
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.core.registry import ActionRegistry
@@ -57,6 +63,22 @@ class CaseClosedError(CaseManagerError):
 
 class NoEngineConfiguredError(CaseManagerError):
     """No decision engine factory was provided, so proposals are unavailable."""
+
+
+class CompensationError(CaseManagerError):
+    """Compensation cannot proceed (bad target, missing snapshot, etc.)."""
+
+
+class CaseStateTransitionError(CaseManagerError):
+    """An invalid case lifecycle transition was requested (e.g. resume an open case)."""
+
+
+class ConstraintViolationError(CaseManagerError):
+    """The process's mutex/requires constraints reject this action right now."""
+
+
+COMPENSATION_ACTION_URI = "urn:ontorag-flow:action:_Compensate"
+"""Synthetic action URI marking a composite compensation event in case history."""
 
 
 def new_case_uri() -> str:
@@ -202,6 +224,8 @@ class CaseManager:
                 f"Action {action_uri} is not allowed by process {case.process_uri}."
             )
 
+        _enforce_constraints(action_uri, process, case)
+
         action = self._registry.get(action_uri)
         if action is None:
             raise ActionNotFoundError(action_uri)
@@ -214,6 +238,242 @@ class CaseManager:
         if new_case.state.goal_reached():
             new_case = new_case.with_status(CaseStatus.CLOSED)
             logger.info("Case %s reached its goal and was closed.", case_uri)
+        elif SideEffectKind.HUMAN in action.side_effects:
+            new_case = new_case.with_status(CaseStatus.SUSPENDED)
+            logger.info("Case %s suspended for human review.", case_uri)
 
         await self._cases.update_case(new_case)
         return new_case, outcome
+
+    # --- saga compensation -------------------------------------------------
+
+    async def compensate(
+        self, case_uri: str, *, target_activity_uri: str | None = None
+    ) -> Case:
+        """Undo a contiguous tail of executed actions on a case.
+
+        For each undone activity (most-recent first) the action's ``compensate``
+        hook is invoked so external side effects can be rolled back. The case
+        state itself is restored from the ``state_before`` snapshot of the
+        earliest undone activity (never replayed — replay would re-trigger any
+        external effects). The undone events are replaced in the case history
+        by a single composite compensation event; the original activities remain
+        in the audit log.
+
+        Args:
+            case_uri: Case to compensate.
+            target_activity_uri: If given, undo from this activity (inclusive)
+                to the end of history. If None, undo the entire history.
+
+        Returns:
+            The compensated case (status set to ``OPEN``).
+
+        Raises:
+            CaseNotFoundError: Unknown case.
+            CompensationError: Nothing to undo, target not found in history, or
+                a prior compensation lies between target and end (unsupported).
+        """
+
+        case = await self._cases.get_case(case_uri)
+        if case is None:
+            raise CaseNotFoundError(case_uri)
+        if not case.history:
+            raise CompensationError(f"Case {case_uri} has no actions to compensate.")
+
+        undo_start = self._find_undo_start(case, target_activity_uri)
+        kept = case.history[:undo_start]
+        undone = case.history[undo_start:]
+
+        if any(event.action_uri == COMPENSATION_ACTION_URI for event in undone):
+            raise CompensationError(
+                "Cannot compensate across a previous compensation event."
+            )
+
+        audit_store = self._executor.audit_store
+        first_undone_activity = await audit_store.get(undone[0].activity_uri)
+        if first_undone_activity is None or first_undone_activity.state_before is None:
+            raise CompensationError(
+                "Missing state_before snapshot; this activity predates v0.7 and cannot be compensated."
+            )
+
+        for event in reversed(undone):
+            activity = await audit_store.get(event.activity_uri)
+            if activity is None:
+                continue
+            action = self._registry.get(activity.action_uri)
+            if action is None:
+                logger.warning(
+                    "No registered action for %s; external rollback skipped.",
+                    activity.action_uri,
+                )
+                continue
+            await action.compensate(_activity_to_result(activity))
+
+        new_state = CaseState(
+            case_uri=case.case_uri,
+            properties=dict(first_undone_activity.state_before),
+            goal=(
+                dict(first_undone_activity.goal_before)
+                if first_undone_activity.goal_before is not None
+                else None
+            ),
+        )
+
+        started, ended = utcnow(), utcnow()
+        compensation = ProvOActivity(
+            action_uri=COMPENSATION_ACTION_URI,
+            case_uri=case.case_uri,
+            agent=self._executor.agent,
+            started_at=started,
+            ended_at=ended,
+            used={"target_activity_uri": target_activity_uri},
+            generated={"compensated": [event.activity_uri for event in undone]},
+            informed_by=kept[-1].activity_uri if kept else None,
+            state_before=dict(case.state.properties),
+            goal_before=dict(case.state.goal) if case.state.goal is not None else None,
+            success=True,
+        )
+        await audit_store.record(compensation)
+
+        new_event = CaseEvent(
+            activity_uri=compensation.activity_uri,
+            action_uri=COMPENSATION_ACTION_URI,
+            at=ended,
+            success=True,
+        )
+        new_case = case.model_copy(
+            update={
+                "state": new_state,
+                "history": kept + (new_event,),
+                "status": CaseStatus.OPEN,
+                "updated_at": utcnow(),
+            }
+        )
+        await self._cases.update_case(new_case)
+        logger.info(
+            "Compensated %d activities on case %s.", len(undone), case_uri
+        )
+        return new_case
+
+    def _find_undo_start(
+        self, case: Case, target_activity_uri: str | None
+    ) -> int:
+        if target_activity_uri is None:
+            return 0
+        for index, event in enumerate(case.history):
+            if event.activity_uri == target_activity_uri:
+                return index
+        raise CompensationError(
+            f"Activity {target_activity_uri} is not in case {case.case_uri}'s history."
+        )
+
+
+    # --- lifecycle: suspend / resume / fork --------------------------------
+
+    async def suspend(self, case_uri: str) -> Case:
+        """Pause an open case; rejected if the case is not currently open."""
+
+        case = await self._require_case(case_uri)
+        if case.status is not CaseStatus.OPEN:
+            raise CaseStateTransitionError(
+                f"Case {case_uri} is {case.status.value}; only open cases can be suspended."
+            )
+        new_case = case.with_status(CaseStatus.SUSPENDED)
+        await self._cases.update_case(new_case)
+        return new_case
+
+    async def resume(self, case_uri: str) -> Case:
+        """Reopen a suspended case; rejected if the case is not suspended."""
+
+        case = await self._require_case(case_uri)
+        if case.status is not CaseStatus.SUSPENDED:
+            raise CaseStateTransitionError(
+                f"Case {case_uri} is {case.status.value}; only suspended cases can be resumed."
+            )
+        new_case = case.with_status(CaseStatus.OPEN)
+        await self._cases.update_case(new_case)
+        return new_case
+
+    async def fork(
+        self,
+        case_uri: str,
+        *,
+        new_uri: str | None = None,
+        copy_history: bool = True,
+    ) -> Case:
+        """Create a new open case copying state (and optionally history) from one source.
+
+        Args:
+            case_uri: The case to fork from.
+            new_uri: URI for the new case; auto-generated if omitted.
+            copy_history: When True, copy the source's history events; when
+                False, start with empty history.
+        """
+
+        source = await self._require_case(case_uri)
+        target_uri = new_uri or new_case_uri()
+        new_state = source.state.model_copy(update={"case_uri": target_uri})
+        new_case = Case(
+            case_uri=target_uri,
+            process_uri=source.process_uri,
+            state=new_state,
+            status=CaseStatus.OPEN,
+            history=source.history if copy_history else (),
+        )
+        await self._cases.create_case(new_case)
+        logger.info("Forked case %s -> %s", case_uri, target_uri)
+        return new_case
+
+    async def _require_case(self, case_uri: str) -> Case:
+        case = await self._cases.get_case(case_uri)
+        if case is None:
+            raise CaseNotFoundError(case_uri)
+        return case
+
+
+def _activity_to_result(activity: ProvOActivity) -> ActionResult:
+    """Reconstruct an :class:`ActionResult` from a recorded activity.
+
+    ``BaseAction.audit_record`` packs ``state_changes`` / ``goal_change`` into
+    ``activity.generated``; this peels them back out so an action's
+    ``compensate`` hook sees the same result shape it produced.
+    """
+
+    generated = dict(activity.generated)
+    state_changes = generated.pop("state_changes", {})
+    goal_change = generated.pop("goal_change", None)
+    return ActionResult(
+        action_uri=activity.action_uri,
+        success=activity.success,
+        outputs=generated,
+        state_changes=state_changes if isinstance(state_changes, dict) else {},
+        goal_change=goal_change if isinstance(goal_change, dict) else None,
+        error=activity.error,
+    )
+
+
+def _enforce_constraints(action_uri: str, process, case: Case) -> None:  # type: ignore[no-untyped-def]
+    """Check the process's mutex/requires constraints against current history.
+
+    Mutex: an action cannot run if another member of one of its mutex groups
+    has already been executed in this case.
+    Requires: an action's prerequisites must all appear in case history first.
+    """
+
+    constraints = process.constraints or {}
+    executed = {event.action_uri for event in case.history}
+
+    for group in constraints.get("mutex", []) or []:
+        if action_uri in group:
+            conflict = executed.intersection(set(group) - {action_uri})
+            if conflict:
+                raise ConstraintViolationError(
+                    f"Mutex: {action_uri} cannot run; case already executed {sorted(conflict)}."
+                )
+
+    requires = (constraints.get("requires") or {}).get(action_uri, [])
+    missing = [prereq for prereq in requires if prereq not in executed]
+    if missing:
+        raise ConstraintViolationError(
+            f"Requires: {action_uri} needs prerequisites {missing} which are not in case history."
+        )

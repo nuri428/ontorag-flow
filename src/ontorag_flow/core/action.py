@@ -96,6 +96,14 @@ class ProvOActivity(BaseModel):
     informed_by: str | None = Field(
         default=None, description="prov:wasInformedBy (previous activity in the case)"
     )
+    state_before: dict[str, Any] | None = Field(
+        default=None,
+        description="Case property snapshot taken before the action ran. Lets the "
+        "case manager rewind state during saga compensation without replaying.",
+    )
+    goal_before: dict[str, Any] | None = Field(
+        default=None, description="Case goal snapshot taken before the action ran."
+    )
     success: bool = True
     error: str | None = None
 

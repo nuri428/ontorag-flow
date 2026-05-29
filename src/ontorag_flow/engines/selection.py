@@ -19,6 +19,7 @@ from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.core.registry import ActionRegistry
 from ontorag_flow.engines.base import DecisionEngine
 from ontorag_flow.engines.bayesian import BayesianMpeEngine, SupportsToolCall
+from ontorag_flow.engines.human import HumanReviewEngine
 from ontorag_flow.engines.llm_agent import LlmAgentEngine, LlmClient
 from ontorag_flow.engines.rule import RuleEngine
 from ontorag_flow.log import get_logger
@@ -27,7 +28,7 @@ logger = get_logger(__name__)
 
 __all__ = ["EngineResolver", "EngineUnavailableError"]
 
-_VALID_KINDS = frozenset({"rule", "bayesian", "llm"})
+_VALID_KINDS = frozenset({"rule", "bayesian", "llm", "human"})
 
 
 class EngineUnavailableError(RuntimeError):
@@ -91,6 +92,8 @@ class EngineResolver:
         kind = self.kind_for(process)
         if kind == "rule":
             return RuleEngine.from_process(process)
+        if kind == "human":
+            return HumanReviewEngine()
         if kind == "bayesian":
             if self._ontorag_client is None:
                 raise EngineUnavailableError(

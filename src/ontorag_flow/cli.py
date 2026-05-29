@@ -303,6 +303,69 @@ def case_propose_next(
     console.print(table)
 
 
+@case_app.command("compensate")
+def case_compensate(
+    case_uri: str = typer.Argument(..., help="Case URI."),
+    target: str | None = typer.Option(
+        None, "--target", help="Activity URI to compensate from (inclusive). Default: undo all.",
+    ),
+) -> None:
+    """Undo a tail of executed actions on a case (saga compensation)."""
+
+    try:
+        case = asyncio.run(
+            _with_manager(lambda m: m.compensate(case_uri, target_activity_uri=target))
+        )
+    except CaseManagerError as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Compensated.[/] status: {case.status.value}, history: {len(case.history)} event(s)")
+
+
+@case_app.command("suspend")
+def case_suspend(case_uri: str = typer.Argument(..., help="Case URI.")) -> None:
+    """Pause an open case."""
+
+    try:
+        case = asyncio.run(_with_manager(lambda m: m.suspend(case_uri)))
+    except CaseManagerError as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[yellow]Suspended.[/] {case.case_uri}")
+
+
+@case_app.command("resume")
+def case_resume(case_uri: str = typer.Argument(..., help="Case URI.")) -> None:
+    """Reopen a suspended case."""
+
+    try:
+        case = asyncio.run(_with_manager(lambda m: m.resume(case_uri)))
+    except CaseManagerError as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Resumed.[/] {case.case_uri}")
+
+
+@case_app.command("fork")
+def case_fork(
+    case_uri: str = typer.Argument(..., help="Case URI to fork from."),
+    new_uri: str | None = typer.Option(None, "--new-uri", help="URI for the forked case."),
+    no_history: bool = typer.Option(False, "--no-history", help="Do not copy source history."),
+) -> None:
+    """Create a new case copying state (and optionally history) from one source."""
+
+    try:
+        case = asyncio.run(
+            _with_manager(
+                lambda m: m.fork(case_uri, new_uri=new_uri, copy_history=not no_history)
+            )
+        )
+    except CaseManagerError as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Forked[/] -> {case.case_uri}")
+
+
 @case_app.command("execute")
 def case_execute(
     case_uri: str = typer.Argument(..., help="Case URI."),

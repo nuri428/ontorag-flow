@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from ontorag_flow.engines.base import DecisionEngine
 from ontorag_flow.engines.bayesian import BayesianMpeEngine
+from ontorag_flow.engines.human import HumanReviewEngine
 from ontorag_flow.engines.llm_agent import LlmAgentEngine
 from ontorag_flow.engines.rule import RuleEngine
 from ontorag_flow.engines.selection import EngineResolver, EngineUnavailableError
@@ -19,6 +20,7 @@ __all__ = [
     "RuleEngine",
     "BayesianMpeEngine",
     "LlmAgentEngine",
+    "HumanReviewEngine",
     "EngineResolver",
     "EngineUnavailableError",
 ]
