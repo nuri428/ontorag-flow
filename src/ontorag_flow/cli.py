@@ -26,6 +26,7 @@ from ontorag_flow.core.action import Action, BaseAction
 from ontorag_flow.core.case_manager import CaseManager, CaseManagerError
 from ontorag_flow.core.executor import ActionExecutor, ActionValidationError
 from ontorag_flow.core.process import ProcessParseError, load_process
+from ontorag_flow.core.process_rdf import load_process_rdf
 from ontorag_flow.core.provenance import ExportFormat, render
 from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.core.state import EMPTY_STATE
@@ -189,10 +190,11 @@ def serve(
 def process_load(
     path: Path = typer.Argument(..., help="Path to a process definition YAML file."),
 ) -> None:
-    """Load a process definition from YAML and persist it."""
+    """Load a process definition from YAML (or Turtle .ttl/.rdf) and persist it."""
 
+    loader = load_process_rdf if path.suffix.lower() in {".ttl", ".rdf", ".n3"} else load_process
     try:
-        process = load_process(path)
+        process = loader(path)
     except ProcessParseError as exc:
         console.print(f"[red]{exc}[/]")
         raise typer.Exit(code=1) from exc

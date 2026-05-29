@@ -27,6 +27,16 @@ dependencies = [
 ontorag-flow = "ontorag_flow.cli:app"
 
 [project.optional-dependencies]
+# LLM provider SDKs for LlmAgentEngine (anthropic/openai). Ollama is reached
+# over its REST API with the already-present httpx, so it needs no SDK here.
+llm = [
+    "anthropic>=0.40",
+    "openai>=1.50",
+]
+# Production persistence backend.
+postgres = [
+    "asyncpg>=0.29",
+]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",

@@ -13,3 +13,4 @@ htmlcov/
 *.sqlite3
 .ruff_cache/
 .mypy_cache/
+.claude/
