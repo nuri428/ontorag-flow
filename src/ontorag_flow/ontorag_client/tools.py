@@ -32,6 +32,22 @@ async def get_schema(client: OntoragClient) -> Any:
     return await client.call_tool("get_schema", {})
 
 
+async def compute_posterior(
+    client: OntoragClient, evidence: dict[str, Any], query: Any
+) -> Any:
+    """Query P(query | evidence) from ontorag's Bayesian layer (requires ontorag v0.7)."""
+
+    return await client.call_tool(
+        "compute_posterior", {"evidence": evidence, "query": query}
+    )
+
+
+async def mpe(client: OntoragClient, evidence: dict[str, Any]) -> Any:
+    """Most Probable Explanation given evidence (requires ontorag v0.7)."""
+
+    return await client.call_tool("mpe", {"evidence": evidence})
+
+
 async def smoke_test(client: OntoragClient) -> bool:
     """Verify the ontorag connection works via a trivial ``find_entities`` call.
 

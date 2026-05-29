@@ -9,5 +9,6 @@ simulation (v0.8), and a human-in-the-loop fallback.
 from __future__ import annotations
 
 from ontorag_flow.engines.base import DecisionEngine
+from ontorag_flow.engines.bayesian import BayesianMpeEngine
 
-__all__ = ["DecisionEngine"]
+__all__ = ["DecisionEngine", "BayesianMpeEngine"]

@@ -46,6 +46,10 @@ class ProcessDefinition(BaseModel):
             "(e.g. the RuleEngine). Kept untyped here so core stays engine-agnostic."
         ),
     )
+    bayesian: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional Bayesian decision config interpreted by BayesianMpeEngine.",
+    )
 
     def allows(self, action_uri: str) -> bool:
         """Whether an action is permitted in this process."""

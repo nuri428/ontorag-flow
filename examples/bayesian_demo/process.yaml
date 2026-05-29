@@ -1,0 +1,50 @@
+# Sample process definition for the BayesianMpeEngine (v0.4).
+#
+# Unlike the RuleEngine demo, this engine *scores* candidate actions by the
+# posterior probability they confer on the `target` proposition. For each
+# candidate it asks ontorag to compute P(target | evidence), then ranks the
+# candidates best-first by that posterior. It only *proposes* — never executes.
+#
+# Running this LIVE requires an ontorag v0.7 instance exposing the
+# `compute_posterior` MCP tool; its response schema is still provisional. Until
+# then the engine is exercised with a fake client in the test-suite and is not
+# wired into the default app factory.
+
+process_uri: "urn:ontorag-flow:process:bayesian-triage"
+name: "Bayesian Triage"
+
+allowed_actions:
+  - "urn:ontorag-flow:action:UpdateCaseProperty"
+
+# The case auto-closes once its state satisfies every predicate here.
+goal:
+  diagnosed: true
+
+# Default properties seeded into every new case of this process.
+initial_state:
+  triage_level: "unknown"
+
+# Bayesian decision config, interpreted by BayesianMpeEngine.
+bayesian:
+  # The goal proposition whose posterior we maximize.
+  target:
+    diagnosed: true
+
+  # Optional; defaults to "compute_posterior" if omitted.
+  query_tool: "compute_posterior"
+
+  # Each candidate is scored by P(target | case_properties ∪ candidate.evidence).
+  candidates:
+    - action: "urn:ontorag-flow:action:UpdateCaseProperty"
+      params:
+        key: "triage_level"
+        value: "urgent"
+      evidence:
+        severity: "high"
+
+    - action: "urn:ontorag-flow:action:UpdateCaseProperty"
+      params:
+        key: "triage_level"
+        value: "routine"
+      evidence:
+        severity: "low"
