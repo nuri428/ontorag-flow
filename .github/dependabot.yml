@@ -1,0 +1,28 @@
+# Weekly dependency PRs for the runtime/dev deps and the actions in CI.
+# We keep the cadence weekly (not daily) so contributors don't drown in
+# bumps, and group the patches so a typical week is one PR instead of ten.
+
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      python-runtime:
+        patterns: ["*"]
+        update-types: ["patch", "minor"]
+      python-major:
+        patterns: ["*"]
+        update-types: ["major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      actions:
+        patterns: ["*"]
