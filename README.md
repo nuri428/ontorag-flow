@@ -226,6 +226,8 @@ docstrings; this section is the index.
 | Stack a proposer with a causal validator from YAML | `engine: stacked` + `arbitration: {proposer: rule\|bayesian\|llm\|human, validator: causal}` | Two-engine arbitration declared in the model, no Python wiring |
 | Define a process as RDF instead of YAML | `ontorag-flow process load <process.ttl\|process.jsonld>` | `urn:ontorag-flow:process#` vocabulary, full field round-trip incl. engine / causal / constraints / timer_events / arbitration |
 | Write back triples to ontorag's ABox | Use `AssertTriple` / `RetractTriple` in `allowed_actions` (live `OntoragClient` required) | `ABOX_WRITE` side effect with saga `compensate` to retract on rollback |
+| Iterate on a process YAML without saving | `ontorag-flow process simulate <yaml> -s K=V [--execute-top] [--explain]` | In-memory case + engine call; optionally executes the top proposal and prints the explain trace |
+| Ship an action as a Python plugin | declare `[project.entry-points."ontorag_flow.actions"]` in `pyproject.toml` of your package | `default_registry()` discovers it on boot; broken plugins are logged and skipped, not fatal |
 
 #### CLI tools
 
@@ -236,6 +238,7 @@ docstrings; this section is the index.
 | `ontorag-flow serve` | Run the FastAPI + MCP server (mounts `/ui`, `/mcp`, REST) |
 | `ontorag-flow action list / register / run` | Inspect, plug in, and execute an action ad-hoc |
 | `ontorag-flow process load / list` | Load a process from YAML (or Turtle) and inspect |
+| `ontorag-flow process simulate <yaml> -s K=V` | Dry-run the engine against an in-memory case — author iterates without polluting the dev DB |
 | `ontorag-flow case create / status` | Create a case + show its state, history, status |
 | `ontorag-flow case propose-next` | Run the decision engine without executing |
 | `ontorag-flow case execute` | Run a chosen action against a case |

@@ -226,6 +226,8 @@ human)만 동작합니다.
 | YAML에서 proposer + causal validator 합성 | `engine: stacked` + `arbitration: {proposer: rule\|bayesian\|llm\|human, validator: causal}` | 두 엔진 arbitration을 모델에 선언, Python wiring 불필요 |
 | 프로세스를 YAML 대신 RDF로 정의 | `ontorag-flow process load <process.ttl\|process.jsonld>` | `urn:ontorag-flow:process#` vocabulary, engine / causal / constraints / timer_events / arbitration 전 필드 round-trip |
 | ontorag ABox에 트리플 write-back | `allowed_actions` 에 `AssertTriple` / `RetractTriple` (live `OntoragClient` 필요) | `ABOX_WRITE` 부수효과 + 롤백 시 retract하는 saga `compensate` |
+| YAML 저장 없이 process 작성 반복 | `ontorag-flow process simulate <yaml> -s K=V [--execute-top] [--explain]` | in-memory 케이스 + 엔진 호출; 옵션으로 top proposal 실행 + explain trace 출력 |
+| Action을 Python 플러그인으로 배포 | 패키지의 `pyproject.toml`에 `[project.entry-points."ontorag_flow.actions"]` 선언 | `default_registry()`가 부팅 시 발견; 깨진 플러그인은 fatal 없이 로그하고 skip |
 
 #### CLI 도구
 
@@ -236,6 +238,7 @@ human)만 동작합니다.
 | `ontorag-flow serve` | FastAPI + MCP 서버 실행 (`/ui`, `/mcp`, REST 마운트) |
 | `ontorag-flow action list / register / run` | 액션 카탈로그 보기, 플러그인 등록, ad-hoc 실행 |
 | `ontorag-flow process load / list` | YAML(또는 Turtle) 프로세스 로드 및 조회 |
+| `ontorag-flow process simulate <yaml> -s K=V` | in-memory 케이스로 엔진 dry-run — 작성자가 dev DB 오염 없이 반복 검증 |
 | `ontorag-flow case create / status` | 케이스 생성 + 상태/히스토리/상태값 표시 |
 | `ontorag-flow case propose-next` | 실행하지 않고 결정 엔진 추천만 받기 |
 | `ontorag-flow case execute` | 선택한 액션을 케이스에 실행 |

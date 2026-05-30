@@ -40,8 +40,24 @@ class ActionRegistry:
         return len(self._actions)
 
 
-def default_registry() -> ActionRegistry:
-    """Return a registry pre-populated with the built-in action library."""
+_PLUGIN_GROUP = "ontorag_flow.actions"
+
+
+def default_registry(*, load_plugins: bool = True) -> ActionRegistry:
+    """Return a registry pre-populated with the built-in action library.
+
+    When ``load_plugins`` is True (default), also discovers actions exposed
+    by third-party packages via Python entry points under the
+    ``ontorag_flow.actions`` group. Each entry point must resolve to a
+    :class:`BaseAction` *class* (not an instance) — the registry instantiates
+    it with no arguments. Plugins requiring injected clients (the way
+    AssertTriple needs an OntoragClient) should expose a separate registration
+    helper instead, modeled after :func:`with_triple_actions`.
+
+    A misbehaving plugin (import error, instantiation error) is logged and
+    skipped rather than aborting startup — one broken third-party action
+    should not break the whole catalog.
+    """
 
     from ontorag_flow.actions.case_state import SetGoal, UpdateCaseProperty
     from ontorag_flow.actions.human import RequestHumanReview
@@ -50,7 +66,43 @@ def default_registry() -> ActionRegistry:
     registry.register(UpdateCaseProperty())
     registry.register(SetGoal())
     registry.register(RequestHumanReview())
+    if load_plugins:
+        _load_plugin_actions(registry)
     return registry
+
+
+def _load_plugin_actions(registry: ActionRegistry) -> None:
+    """Discover and register actions exposed via the entry-point group.
+
+    Each entry must resolve to a BaseAction subclass; we instantiate it
+    no-arg. URI collisions are resolved by registry semantics (last wins),
+    which lets users override a built-in action by shipping a plugin with
+    the same URI — intentional, lets a deployment swap an implementation.
+    """
+
+    from importlib.metadata import entry_points
+
+    from ontorag_flow.log import get_logger
+
+    logger = get_logger(__name__)
+    try:
+        eps = entry_points(group=_PLUGIN_GROUP)
+    except Exception as exc:  # noqa: BLE001 — entry_points failures shouldn't kill boot
+        logger.warning("Could not enumerate %r entry points: %s", _PLUGIN_GROUP, exc)
+        return
+
+    for entry in eps:
+        try:
+            action_cls = entry.load()
+            instance = action_cls()
+            if not hasattr(instance, "uri"):
+                raise TypeError(
+                    f"{entry.value!r} resolved to {type(instance).__name__}, not a BaseAction"
+                )
+            registry.register(instance)
+            logger.info("Registered plugin action %r from %s", instance.uri, entry.value)
+        except Exception as exc:  # noqa: BLE001 — one bad plugin must not break the catalog
+            logger.warning("Skipping plugin action %r: %s", entry.value, exc)
 
 
 def with_triple_actions(registry: ActionRegistry, client: object) -> ActionRegistry:
