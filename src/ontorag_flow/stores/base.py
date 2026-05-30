@@ -12,6 +12,17 @@ from typing import Protocol
 from ontorag_flow.core.case import Case, CaseStatus
 from ontorag_flow.core.process import ProcessDefinition
 
+__all__ = ["ProcessStore", "CaseStore", "OptimisticLockError"]
+
+
+class OptimisticLockError(RuntimeError):
+    """``update_case`` lost the race — another writer moved the version forward.
+
+    The caller should re-fetch the case, re-apply its change on top of the
+    fresh state, and retry. The store does not auto-retry because the caller
+    knows whether the change is idempotent under the new state.
+    """
+
 
 class ProcessStore(Protocol):
     """Persists process definitions."""

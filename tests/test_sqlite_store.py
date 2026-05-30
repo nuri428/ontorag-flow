@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ontorag_flow.core.action import ProvOActivity
 from ontorag_flow.core.case import Case, CaseStatus
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.core.state import CaseState
+from ontorag_flow.stores.base import OptimisticLockError
 from ontorag_flow.stores.sqlite import SqliteStore
 
 
@@ -37,6 +40,28 @@ async def test_case_roundtrip_and_find(sqlite_store: SqliteStore) -> None:
     assert len(await sqlite_store.find_cases(status=CaseStatus.OPEN)) == 0
     assert len(await sqlite_store.find_cases(process_uri="urn:p:1")) == 1
     assert len(await sqlite_store.find_cases(process_uri="urn:p:other")) == 0
+
+
+async def test_optimistic_lock_blocks_stale_update(sqlite_store: SqliteStore) -> None:
+    case = Case(case_uri="urn:c:lock", process_uri="urn:p", state=CaseState(case_uri="urn:c:lock"))
+    await sqlite_store.create_case(case)
+
+    # First writer wins and moves the row to version 1.
+    first = await sqlite_store.get_case("urn:c:lock")
+    assert first is not None and first.version == 0
+    await sqlite_store.update_case(first.with_status(CaseStatus.SUSPENDED))
+
+    # A concurrent writer still holds the version=0 view and must lose the race.
+    with pytest.raises(OptimisticLockError):
+        await sqlite_store.update_case(case.with_status(CaseStatus.CLOSED))
+
+    # Re-fetching gives version=1; that case can be updated again.
+    fresh = await sqlite_store.get_case("urn:c:lock")
+    assert fresh is not None and fresh.version == 1
+    await sqlite_store.update_case(fresh.with_status(CaseStatus.CLOSED))
+
+    final = await sqlite_store.get_case("urn:c:lock")
+    assert final is not None and final.version == 2 and final.status is CaseStatus.CLOSED
 
 
 async def test_activity_roundtrip_filtered_by_case(sqlite_store: SqliteStore) -> None:

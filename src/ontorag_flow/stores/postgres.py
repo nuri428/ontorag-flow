@@ -17,6 +17,7 @@ from ontorag_flow.core.action import ProvOActivity
 from ontorag_flow.core.case import Case, CaseStatus
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.log import get_logger
+from ontorag_flow.stores.base import OptimisticLockError
 
 logger = get_logger(__name__)
 
@@ -35,6 +36,7 @@ _SCHEMA_STATEMENTS = (
         process_uri TEXT NOT NULL,
         status      TEXT NOT NULL,
         data        TEXT NOT NULL,
+        version     INTEGER NOT NULL DEFAULT 0,
         seq         BIGSERIAL
     )
     """,
@@ -119,11 +121,12 @@ class PostgresStore:
 
     async def create_case(self, case: Case) -> None:
         await self._c.execute(
-            "INSERT INTO cases (uri, process_uri, status, data) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO cases (uri, process_uri, status, data, version) VALUES ($1, $2, $3, $4, $5)",
             case.case_uri,
             case.process_uri,
             case.status.value,
             case.model_dump_json(),
+            case.version,
         )
 
     async def get_case(self, case_uri: str) -> Case | None:
@@ -131,13 +134,27 @@ class PostgresStore:
         return Case.model_validate_json(row["data"]) if row else None
 
     async def update_case(self, case: Case) -> None:
-        await self._c.execute(
-            "UPDATE cases SET process_uri = $1, status = $2, data = $3 WHERE uri = $4",
-            case.process_uri,
-            case.status.value,
-            case.model_dump_json(),
+        """Optimistic update: write version+1 only if the row is still at version."""
+
+        expected_version = case.version
+        new_version = expected_version + 1
+        next_case = case.model_copy(update={"version": new_version})
+        result = await self._c.execute(
+            "UPDATE cases SET process_uri = $1, status = $2, data = $3, version = $4 "
+            "WHERE uri = $5 AND version = $6",
+            next_case.process_uri,
+            next_case.status.value,
+            next_case.model_dump_json(),
+            new_version,
             case.case_uri,
+            expected_version,
         )
+        # asyncpg execute returns a status string like "UPDATE 1" / "UPDATE 0".
+        if isinstance(result, str) and result.endswith(" 0"):
+            raise OptimisticLockError(
+                f"Case {case.case_uri} was modified by another writer "
+                f"(expected version {expected_version})."
+            )
 
     async def find_cases(
         self,

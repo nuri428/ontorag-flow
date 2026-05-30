@@ -55,6 +55,13 @@ class Case(BaseModel):
     history: tuple[CaseEvent, ...] = ()
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
+    version: int = Field(
+        default=0,
+        description=(
+            "Optimistic-lock generation counter; bumped by every successful "
+            "update so concurrent writers detect lost updates."
+        ),
+    )
 
     @property
     def last_activity_uri(self) -> str | None:

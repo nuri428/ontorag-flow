@@ -15,6 +15,7 @@ from ontorag_flow.core.action import ProvOActivity
 from ontorag_flow.core.case import Case, CaseStatus
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.log import get_logger
+from ontorag_flow.stores.base import OptimisticLockError
 
 logger = get_logger(__name__)
 
@@ -28,7 +29,8 @@ CREATE TABLE IF NOT EXISTS cases (
     uri         TEXT PRIMARY KEY,
     process_uri TEXT NOT NULL,
     status      TEXT NOT NULL,
-    data        TEXT NOT NULL
+    data        TEXT NOT NULL,
+    version     INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS activities (
     uri      TEXT PRIMARY KEY,
@@ -102,8 +104,14 @@ class SqliteStore:
 
     async def create_case(self, case: Case) -> None:
         await self._conn.execute(
-            "INSERT INTO cases (uri, process_uri, status, data) VALUES (?, ?, ?, ?)",
-            (case.case_uri, case.process_uri, case.status.value, case.model_dump_json()),
+            "INSERT INTO cases (uri, process_uri, status, data, version) VALUES (?, ?, ?, ?, ?)",
+            (
+                case.case_uri,
+                case.process_uri,
+                case.status.value,
+                case.model_dump_json(),
+                case.version,
+            ),
         )
         await self._conn.commit()
 
@@ -115,11 +123,33 @@ class SqliteStore:
         return Case.model_validate_json(row["data"]) if row else None
 
     async def update_case(self, case: Case) -> None:
-        await self._conn.execute(
-            "UPDATE cases SET process_uri = ?, status = ?, data = ? WHERE uri = ?",
-            (case.process_uri, case.status.value, case.model_dump_json(), case.case_uri),
+        """Persist the case, asserting nobody else has updated it meanwhile.
+
+        Uses ``case.version`` as the expected current version and writes
+        ``version + 1``; rowcount == 0 means another writer won the race.
+        """
+
+        expected_version = case.version
+        new_version = expected_version + 1
+        next_case = case.model_copy(update={"version": new_version})
+        cursor = await self._conn.execute(
+            "UPDATE cases SET process_uri = ?, status = ?, data = ?, version = ? "
+            "WHERE uri = ? AND version = ?",
+            (
+                next_case.process_uri,
+                next_case.status.value,
+                next_case.model_dump_json(),
+                new_version,
+                case.case_uri,
+                expected_version,
+            ),
         )
         await self._conn.commit()
+        if cursor.rowcount == 0:
+            raise OptimisticLockError(
+                f"Case {case.case_uri} was modified by another writer "
+                f"(expected version {expected_version})."
+            )
 
     async def find_cases(
         self,
