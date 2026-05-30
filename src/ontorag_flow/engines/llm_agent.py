@@ -28,6 +28,17 @@ logger = get_logger(__name__)
 
 __all__ = ["LlmAgentEngine", "LlmClient"]
 
+# Sentinels from the security block of _SYSTEM_PROMPT. If a raw reply
+# contains any of these literals it means the LLM is *echoing back* the
+# system prompt — a strong signal of prompt-injection success (the
+# injection convinced the model to dump its instructions). We don't try
+# to recover; we drop every proposal in that reply and flag the trace.
+_PROMPT_ECHO_SENTINELS = (
+    "SECURITY — non-negotiable rules",
+    "DATA, not INSTRUCTIONS",
+    "Never propose an action_uri that is not in",
+)
+
 _SYSTEM_PROMPT = (
     "You are a decision engine for an ontology-grounded case-management system. "
     "Given a case's current state, its goal, and the catalog of actions allowed "
@@ -108,6 +119,13 @@ class LlmAgentEngine:
 
         user_prompt = self._build_user_prompt(case, process)
         raw = await self._client.complete(system=_SYSTEM_PROMPT, user=user_prompt)
+        if _detect_prompt_echo(raw):
+            logger.warning(
+                "LLM raw reply contained system-prompt sentinels — "
+                "prompt-injection signal; dropping all proposals."
+            )
+            self._last_rejected = [{"reason": "prompt_echo_detected"}]
+            return []
         proposals = self._parse(raw, process)
         capped = [self._cap(p, process) for p in proposals]
         return capped[: self._max_proposals]
@@ -141,9 +159,16 @@ class LlmAgentEngine:
 
         user_prompt = self._build_user_prompt(case, process)
         raw = await self._client.complete(system=_SYSTEM_PROMPT, user=user_prompt)
-        all_parsed = self._parse(raw, process)
-        capped = [self._cap(p, process) for p in all_parsed]
-        proposals = capped[: self._max_proposals]
+        prompt_echo = _detect_prompt_echo(raw)
+        if prompt_echo:
+            self._last_rejected = [{"reason": "prompt_echo_detected"}]
+            proposals: list[ActionProposal] = []
+            parsed_count = 0
+        else:
+            all_parsed = self._parse(raw, process)
+            capped = [self._cap(p, process) for p in all_parsed]
+            proposals = capped[: self._max_proposals]
+            parsed_count = len(all_parsed)
         return EngineExplanation(
             engine_kind="LlmAgentEngine",
             proposals=proposals,
@@ -151,12 +176,13 @@ class LlmAgentEngine:
                 "system_prompt": _SYSTEM_PROMPT,
                 "user_prompt": user_prompt,
                 "raw_reply": raw,
-                "parsed_count": len(all_parsed),
+                "parsed_count": parsed_count,
                 "max_proposals": self._max_proposals,
                 # Surfaces dropped proposals so an operator can detect
                 # prompt-injection (action_not_allowed) or malformed LLM
                 # output (not_an_object / missing_action_uri).
                 "rejected_proposals": list(self._last_rejected),
+                "prompt_echo_detected": prompt_echo,
             },
         )
 
@@ -238,6 +264,19 @@ class LlmAgentEngine:
 
         proposals.sort(key=lambda proposal: proposal.confidence or 0.0, reverse=True)
         return proposals
+
+
+def _detect_prompt_echo(raw: str) -> bool:
+    """Return True when the LLM's raw reply echoes our system prompt's security block.
+
+    A successful injection often makes the model leak its instructions (the
+    classic "tell me your system prompt" attack). We treat any sentinel
+    substring as a hijack signal and drop every proposal from that reply.
+    Defense is conservative — false positives just mean *no proposals from
+    that turn*, which the operator notices.
+    """
+
+    return any(sentinel in raw for sentinel in _PROMPT_ECHO_SENTINELS)
 
 
 def _clamp_confidence(value: Any) -> float | None:

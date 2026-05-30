@@ -484,6 +484,52 @@ class CaseManager:
 
     # --- timer events ------------------------------------------------------
 
+    async def auto_run_all(self) -> list[str]:
+        """Auto-execute the top proposal on every open case that passes the gate.
+
+        The gate (S3 in docs/security.md):
+          - case.status is OPEN
+          - process.execute_policy.auto is True
+          - engine returned at least one proposal
+          - top proposal's confidence >= process.execute_policy.min_confidence
+            (defaulting to 0.0 if unset)
+          - top proposal's action is NOT marked auto_execute_disabled
+            (AssertTriple / RetractTriple / RequestHumanReview never auto-run)
+
+        Any case failing any check is *silently skipped* — auto-run is a
+        no-op for cases the operator did not explicitly opt into. Returns
+        the list of case_uris where an action actually fired.
+        """
+
+        fired: list[str] = []
+        cases = await self.find_cases(status=CaseStatus.OPEN)
+        for case in cases:
+            process = await self._processes.get_process(case.process_uri)
+            if process is None:
+                continue
+            policy = process.execute_policy or {}
+            if not policy.get("auto"):
+                continue
+            min_conf = float(policy.get("min_confidence", 0.0))
+            try:
+                proposals = await self.propose_next(case.case_uri)
+            except CaseManagerError:
+                continue
+            if not proposals:
+                continue
+            top = proposals[0]
+            if top.confidence is None or top.confidence < min_conf:
+                continue
+            action = self._registry.get(top.action_uri)
+            if action is None or getattr(action, "auto_execute_disabled", False):
+                continue
+            try:
+                await self.execute_action(case.case_uri, top.action_uri, top.params)
+                fired.append(case.case_uri)
+            except CaseManagerError as exc:
+                logger.warning("auto-run skipped case %s: %s", case.case_uri, exc)
+        return fired
+
     async def tick(self) -> list[str]:
         """Fire elapsed timer events across all OPEN cases.
 

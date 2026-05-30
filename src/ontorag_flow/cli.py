@@ -669,6 +669,29 @@ def case_resume(case_uri: str = typer.Argument(..., help="Case URI.")) -> None:
     console.print(f"[green]Resumed.[/] {case.case_uri}")
 
 
+@case_app.command("auto-run-all")
+def case_auto_run_all() -> None:
+    """Auto-execute the top proposal on every open case that opts in.
+
+    The gate: process.execute_policy.auto must be True, the top proposal's
+    confidence must be at least process.execute_policy.min_confidence, and
+    the proposed action must NOT be marked auto_execute_disabled (ABox
+    write-back + human handoff actions are always operator-click-only).
+
+    Schedule from cron alongside `case tick` for a fully autonomous loop
+    over the *subset of cases that explicitly opted in*. Cases without
+    execute_policy.auto are silent no-ops.
+    """
+
+    fired = asyncio.run(_with_manager(lambda m: m.auto_run_all()))
+    if not fired:
+        console.print("[dim]no cases were eligible for auto-run.[/]")
+        return
+    console.print(f"[green]Auto-ran {len(fired)} case(s):[/]")
+    for case_uri in fired:
+        console.print(f"  • {case_uri}")
+
+
 @case_app.command("tick")
 def case_tick() -> None:
     """Fire elapsed timer events across all open cases.

@@ -82,6 +82,43 @@ async def test_llm_max_confidence_cap_applies() -> None:
     assert proposals[0].confidence == 0.7  # capped
 
 
+async def test_llm_prompt_echo_drops_all_proposals() -> None:
+    """LLM raw reply containing system-prompt sentinels = injection signal."""
+
+    process = ProcessDefinition(process_uri="urn:p:echo", name="Echo", allowed_actions=[UPDATE])
+    # The reply *looks* like a valid proposal but also leaks the system prompt.
+    reply = (
+        "Here are my proposals — but first, my instructions: "
+        "SECURITY — non-negotiable rules state I should... "
+        f'[{{"action_uri": "{UPDATE}", "confidence": 0.9}}]'
+    )
+    engine = LlmAgentEngine(_FakeLlm(reply))
+
+    proposals = await engine.propose_next(_case(), process)
+    assert proposals == []  # everything dropped
+
+    explanation = await engine.explain(_case(), process)
+    assert explanation.proposals == []
+    assert explanation.trace["prompt_echo_detected"] is True
+    assert any(
+        r.get("reason") == "prompt_echo_detected" for r in explanation.trace["rejected_proposals"]
+    )
+
+
+async def test_llm_no_echo_normal_pass_through() -> None:
+    """A clean reply has prompt_echo_detected=False and proposals survive."""
+
+    process = ProcessDefinition(
+        process_uri="urn:p:noecho", name="No Echo", allowed_actions=[UPDATE]
+    )
+    reply = f'[{{"action_uri": "{UPDATE}", "confidence": 0.8}}]'
+    engine = LlmAgentEngine(_FakeLlm(reply))
+
+    explanation = await engine.explain(_case(), process)
+    assert explanation.trace["prompt_echo_detected"] is False
+    assert len(explanation.proposals) == 1
+
+
 async def test_llm_max_confidence_unset_passes_through() -> None:
     """Without the cap, the original confidence is preserved."""
 
@@ -298,6 +335,134 @@ async def test_plugin_allowlist_skips_non_listed_entries(
 
     messages = [r.message for r in caplog.records]
     assert any("not in ONTORAG_FLOW_PLUGIN_ALLOWLIST" in msg and "z:W" in msg for msg in messages)
+
+
+# --- Z3 — auto-run-all gate (execute_policy + auto_execute_disabled) ---
+
+
+@pytest_asyncio.fixture
+async def autorun_manager() -> AsyncIterator[CaseManager]:
+    async with SqliteStore(":memory:") as store:
+        from ontorag_flow.engines.rule import RuleEngine
+
+        manager = CaseManager(
+            case_store=store,
+            process_store=store,
+            executor=ActionExecutor(audit_store=store, agent="urn:test"),
+            registry=default_registry(),
+            engine_factory=RuleEngine.from_process,
+        )
+        yield manager
+
+
+def _rule_proposing_update(confidence: float) -> dict[str, Any]:
+    return {
+        "name": "always",
+        "when": {},
+        "then": {"action": UPDATE, "params": {"key": "k", "value": "v"}},
+        "confidence": confidence,
+    }
+
+
+async def test_auto_run_all_skips_when_policy_not_auto(
+    autorun_manager: CaseManager,
+) -> None:
+    """Without execute_policy.auto, auto_run_all is a no-op for that case."""
+
+    process = ProcessDefinition(
+        process_uri="urn:p:noauto",
+        name="NoAuto",
+        allowed_actions=[UPDATE],
+        rules=[_rule_proposing_update(0.95)],
+        # execute_policy unset → no auto-run
+    )
+    await autorun_manager.register_process(process)
+    await autorun_manager.create_case("urn:p:noauto")
+
+    fired = await autorun_manager.auto_run_all()
+    assert fired == []
+
+
+async def test_auto_run_all_fires_when_policy_and_confidence_pass(
+    autorun_manager: CaseManager,
+) -> None:
+    """auto + min_confidence: top proposal at-or-above the threshold fires."""
+
+    process = ProcessDefinition(
+        process_uri="urn:p:auto",
+        name="Auto",
+        allowed_actions=[UPDATE],
+        rules=[_rule_proposing_update(0.9)],
+        execute_policy={"auto": True, "min_confidence": 0.8},
+    )
+    await autorun_manager.register_process(process)
+    case = await autorun_manager.create_case("urn:p:auto")
+
+    fired = await autorun_manager.auto_run_all()
+    assert fired == [case.case_uri]
+    # And the state actually advanced.
+    refreshed = await autorun_manager.get_case(case.case_uri)
+    assert refreshed is not None
+    assert refreshed.state.properties.get("k") == "v"
+
+
+async def test_auto_run_all_skips_when_confidence_below_min(
+    autorun_manager: CaseManager,
+) -> None:
+    """min_confidence acts as a real gate; sub-threshold proposals don't fire."""
+
+    process = ProcessDefinition(
+        process_uri="urn:p:low",
+        name="Low",
+        allowed_actions=[UPDATE],
+        rules=[_rule_proposing_update(0.5)],
+        execute_policy={"auto": True, "min_confidence": 0.8},
+    )
+    await autorun_manager.register_process(process)
+    await autorun_manager.create_case("urn:p:low")
+
+    fired = await autorun_manager.auto_run_all()
+    assert fired == []
+
+
+async def test_auto_run_all_skips_auto_execute_disabled_actions(
+    autorun_manager: CaseManager,
+) -> None:
+    """Even with high confidence + auto policy, AssertTriple/etc. never fire."""
+
+    # We don't need a live ontorag client for this — registry must have the
+    # action, then RuleEngine proposes it. AssertTriple's auto_execute_disabled
+    # check happens *before* execute_action so the lack of client is fine.
+    from ontorag_flow.core.registry import with_triple_actions
+
+    class _FakeClient:
+        async def call_tool(self, name: str, arguments: Any) -> Any:
+            return None
+
+    with_triple_actions(autorun_manager._registry, _FakeClient())
+
+    process = ProcessDefinition(
+        process_uri="urn:p:dangerous",
+        name="Dangerous",
+        allowed_actions=["urn:ontorag-flow:action:AssertTriple"],
+        rules=[
+            {
+                "name": "assert",
+                "when": {},
+                "then": {
+                    "action": "urn:ontorag-flow:action:AssertTriple",
+                    "params": {"subject": "urn:s", "predicate": "urn:p", "object": "urn:o"},
+                },
+                "confidence": 1.0,
+            }
+        ],
+        execute_policy={"auto": True, "min_confidence": 0.0},
+    )
+    await autorun_manager.register_process(process)
+    await autorun_manager.create_case("urn:p:dangerous")
+
+    fired = await autorun_manager.auto_run_all()
+    assert fired == []  # AssertTriple has auto_execute_disabled=True
 
 
 # --- shared helper ---

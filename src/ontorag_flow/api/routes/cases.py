@@ -254,6 +254,23 @@ async def tick_timers(
     return await manager.tick()
 
 
+@router.post("/auto-run-all", operation_id="auto_run_all", response_model=list[str])
+async def auto_run_all(
+    manager: CaseManager = Depends(get_case_manager),
+) -> list[str]:
+    """Auto-execute the top proposal on every open case that opts in.
+
+    The gate is described in :meth:`CaseManager.auto_run_all` and
+    `docs/security.md` (S3). Cases without ``execute_policy.auto`` set,
+    or whose top proposal's confidence is below ``min_confidence``, or
+    whose proposed action is marked ``auto_execute_disabled``, are
+    silently skipped. Returns the list of case URIs where an action
+    actually fired — typically called from cron / a scheduler.
+    """
+
+    return await manager.auto_run_all()
+
+
 @router.post("/{case_uri}/fork", operation_id="fork_case", response_model=Case)
 async def fork_case(
     case_uri: str,

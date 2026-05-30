@@ -125,6 +125,14 @@
     {% if trace.reason is defined %}
     <div class="callout">{{ trace.reason }}</div>
     {% else %}
+    {% if trace.get('prompt_echo_detected') %}
+    <div class="callout error">
+      <strong>Prompt-injection signal:</strong> the LLM's raw reply echoed
+      a system-prompt sentinel. All proposals dropped from this turn.
+      Inspect the raw reply below and audit how case state reached the
+      prompt.
+    </div>
+    {% endif %}
     <p class="muted">
       LLM returned <strong>{{ trace.parsed_count }}</strong> proposal(s);
       capped at <strong>{{ trace.max_proposals }}</strong>.
