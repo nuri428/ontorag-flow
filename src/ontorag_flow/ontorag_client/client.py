@@ -137,6 +137,7 @@ class OntoragClient:
 
         if self._session is None:
             raise OntoragClientError("Not connected — call connect() first.")
+        self._raise_if_zombie()
 
         result = await self._session.call_tool(name, arguments)
         if getattr(result, "isError", False):
@@ -148,8 +149,32 @@ class OntoragClient:
 
         if self._session is None:
             raise OntoragClientError("Not connected — call connect() first.")
+        self._raise_if_zombie()
         result = await self._session.list_tools()
         return [tool.name for tool in result.tools]
+
+    def _raise_if_zombie(self) -> None:
+        """Reject calls when the background serve task has already exited.
+
+        Without this guard, the transport's memory streams could be closed
+        while ``self._session`` still looked alive — the next call_tool would
+        hang on a receive that no producer feeds. We surface the cause as a
+        typed error and reset state so a subsequent ``connect()`` works.
+        """
+
+        if self._task is None or not self._task.done():
+            return
+        cause: BaseException | None = None
+        if not self._task.cancelled():
+            cause = self._task.exception()
+        if cause is None and self._connect_error is not None:
+            cause = self._connect_error
+        detail = _root_cause(cause) if cause is not None else "session task ended"
+        self._session = None
+        self._task = None
+        raise OntoragClientError(
+            f"ontorag session ended unexpectedly: {detail}"
+        )
 
 
 def _root_cause(exc: BaseException) -> str:
