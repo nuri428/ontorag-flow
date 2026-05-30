@@ -1,0 +1,37 @@
+# Keep the build context lean. Most of the repo is irrelevant inside
+# the image; what we actually need is the pyproject manifests + src/.
+
+# VCS / IDE
+.git
+.github
+.claude
+
+# Python / uv artefacts
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+
+# Local data — never accidentally bake a dev DB into the image.
+*.db
+*.sqlite3
+.env
+
+# Tests / examples / docs are not needed at runtime.
+tests
+examples
+docs
+
+# Docker config itself (avoid recursive include).
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+# Pre-commit / CI config aren't read by the runtime.
+.pre-commit-config.yaml

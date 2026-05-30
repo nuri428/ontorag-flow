@@ -1,0 +1,65 @@
+# Local-development compose. Default brings up ontorag-flow with the
+# in-container SQLite store (data persisted to a named volume so you
+# don't lose cases on restart). Optional Postgres profile is opt-in.
+#
+# Common recipes:
+#
+#   docker compose up                    # ontorag-flow + SQLite
+#   docker compose --profile postgres up # ontorag-flow + Postgres
+#
+# Composing with the sister `ontorag` server (its compose lives in the
+# adjacent repo): run with both files so the two services share the
+# default network and ONTORAG_MCP_URL resolves by service name.
+#
+#   docker compose -f docker-compose.yml -f ../ontorag/docker-compose.yml up
+#
+# Then set CONNECT_ONTORAG=true (commented below) to enable the
+# Bayesian/Causal engines.
+
+name: ontorag-flow
+
+services:
+  ontorag-flow:
+    build: .
+    image: ontorag-flow:latest
+    ports:
+      - "8100:8100"
+    environment:
+      AGENT_ID: urn:ontorag-flow:agent:compose
+      ONTORAG_MCP_URL: http://ontorag:8000/mcp
+      # CONNECT_ONTORAG: "true"   # uncomment when ontorag is running alongside
+      # LLM_PROVIDER: anthropic   # uncomment + set the matching API key to
+      # LLM_MODEL: claude-sonnet-4-6   # enable LlmAgentEngine
+    volumes:
+      - ontorag-flow-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request as r; sys.exit(0 if r.urlopen('http://localhost:8100/health', timeout=2).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: ontorag_flow
+      POSTGRES_PASSWORD: ontorag_flow_dev
+      POSTGRES_DB: ontorag_flow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ontorag_flow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ontorag-flow-data:
+  postgres-data:

@@ -121,9 +121,39 @@ Copy `.env.example` to `.env` and edit. Key knobs:
 ## Optional extras
 
 ```bash
-uv sync --extra dev                       # tests
+uv sync --extra dev                       # tests + ruff + pyright + bandit + testcontainers
 uv sync --extra dev --extra llm           # + Anthropic / OpenAI SDKs
-uv sync --extra dev --extra postgres      # + asyncpg + testcontainers (live Postgres tests)
+uv sync --extra postgres                  # + asyncpg (production)
+```
+
+## Docker
+
+A multi-stage `Dockerfile` (Python 3.12-slim, `uv`-built venv, non-root
+user, stdlib `/health` healthcheck) ships in the repo. Final image is
+~230 MB with the core deps only.
+
+```bash
+# build + run with the in-container SQLite store
+docker compose up
+
+#   →  http://localhost:8100/ui/      (read-only inspector)
+#   →  http://localhost:8100/docs     (OpenAPI)
+#   →  http://localhost:8100/health   (liveness)
+
+# Postgres profile instead of SQLite
+docker compose --profile postgres up
+
+# add optional extras at build time
+docker build --build-arg INSTALL_EXTRAS="postgres llm" -t ontorag-flow:full .
+```
+
+Compose with the sister `ontorag` server's compose file so they share a
+default network and `ONTORAG_MCP_URL` resolves by service name:
+
+```bash
+docker compose -f docker-compose.yml -f ../ontorag/docker-compose.yml up
+# then set CONNECT_ONTORAG=true in docker-compose.yml to enable the
+# Bayesian/Causal engines.
 ```
 
 ## Layout

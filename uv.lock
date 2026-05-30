@@ -848,6 +848,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "testcontainers" },
 ]
 llm = [
     { name = "anthropic" },
@@ -855,7 +856,6 @@ llm = [
 ]
 postgres = [
     { name = "asyncpg" },
-    { name = "testcontainers" },
 ]
 
 [package.metadata]
@@ -880,7 +880,7 @@ requires-dist = [
     { name = "rdflib", specifier = ">=7.6.0" },
     { name = "rich", specifier = ">=13.7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7" },
-    { name = "testcontainers", extras = ["postgres"], marker = "extra == 'postgres'", specifier = ">=4.0" },
+    { name = "testcontainers", extras = ["postgres"], marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
