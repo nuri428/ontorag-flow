@@ -498,6 +498,62 @@ When unsure about scope:
 | v0.8 | v0.8 (Causal) | CausalSimulationEngine, do-calculus pre-flight |
 | v1.0 | v0.9+ | demo on all three backends (Fuseki/Neo4j/FalkorDB) |
 
+## Known risks (decide for v1.x)
+
+Carried over from a premortem after the v0.1–v0.9 build. P2/P3/P6 were
+addressed; P5 and P7 need a design decision before code, so they are parked
+here rather than silently chosen.
+
+### P5 — Case history bloat for long-running cases
+
+A case that runs for weeks accumulates 10⁴+ events. `Case.history` is a
+tuple serialised as JSON into the single `cases.data` column, so each
+`update_case` rewrites the whole row — quadratic write cost over the
+lifetime of the case.
+
+**Mitigation A (preferred, breaking)** — make the `activities` table the
+authoritative history and turn `Case.history` into a lazy view computed
+from `audit_store.list_by_case(case_uri)`. Case rows shrink to constant
+size. Requires:
+- Removing `history` from the persisted Case schema (migration: drop the
+  field from `cases.data` on read, or leave it as a deprecated cache).
+- Adding a `seq` join so events come back in deterministic order.
+- Updating compensation to walk the activities table instead of
+  `case.history`.
+
+**Mitigation B (simpler, lossy)** — cap `Case.history` at a fixed window
+(say last N=1000 events); drop the oldest from the in-case tuple while
+the audit retains everything. Compensate can only target events still in
+the window; older events would need explicit fetch from the audit store.
+
+Decision needed: A is correct; B is cheap. A wins for v1.x if the
+medical_triage demo will exercise long cases.
+
+### P7 — Audit recording failure can orphan external side effects
+
+`executor.execute` runs the action first, then awaits
+`audit_store.record(activity)`. If the audit write fails (disk full, DB
+down) *after* the external side effect succeeded, the caller sees an
+exception, the side effect is permanent, and there is no provenance —
+which is exactly the case the audit was built for.
+
+**Mitigation (write-ahead audit)** — record a `status: "pending"` activity
+*before* `action.execute`, then update it to `"completed"` or `"failed"`
+afterwards. If the post-execute update fails, the activity stays
+`"pending"`: a reaper job (or operator) can reconcile.
+
+Requires:
+- A new `status: Literal["pending","completed","failed"] = "completed"`
+  field on `ProvOActivity` (default keeps existing rows compatible).
+- Two writes per action instead of one (cost: ~1 SQLite/PG INSERT each).
+- A compensation rule: pending activities older than X minutes are surfaced
+  for review rather than retried.
+
+Decision needed: worth the extra write? Probably yes for `EXTERNAL_API` /
+`ABOX_WRITE` actions, optional for `CASE_STATE`-only actions where the
+"external effect" is just our own state. A side-effect-aware policy would
+let the executor pick.
+
 ## License
 
 MIT (same as ontorag).
