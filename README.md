@@ -308,6 +308,10 @@ docstrings; this section is the index.
 
 ## Deep reading
 
+- [`docs/operator-guide.md`](docs/operator-guide.md) — **operator
+  guide** for the browser UI (EN + KO). What each lifecycle button does,
+  how to read error callouts, common scenarios, counterfactual replay,
+  and what the UI deliberately does *not* do.
 - [`CLAUDE.md`](CLAUDE.md) — project specification, architecture
   rationale, milestone plan, anti-patterns, **Known risks for v1.x**
   (history bloat, write-ahead audit).
