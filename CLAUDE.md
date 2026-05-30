@@ -32,11 +32,94 @@ Same developer audience as ontorag: evaluating ontology-based LLM application fr
 
 ## Positioning
 
-- **Camunda / Activiti / Flowable**: BPMN engines. No ontology, no LLM-native interface, no probabilistic decisioning. Heavy XML schemas, designer-tool-centric.
-- **Temporal / Cadence**: durable execution. Powerful for distributed workflows but no ontology, no decision intelligence, code-only DSL.
-- **LangGraph / CrewAI / AutoGen**: LLM agent orchestration. No formal action model, no ontology, no audit/provenance discipline.
-- **Palantir AIP Workshop**: proprietary, full Kinetic story but closed.
-- **ontorag-flow**: ontology-grounded action model + pluggable decision engines (rule, Bayesian MPE, LLM) + MCP-native + composes with ontorag for reasoning. CMMN-inspired adaptive case management, not BPMN-style rigid flow.
+### Where on the BPM ↔ ACM spectrum
+
+```
+   BPM (prescriptive)              ←—— spectrum ——→            ACM (adaptive)
+   ─────────────────                                            ────────────
+   "do exactly this sequence"                                   "these actions are allowed,
+                                                                 engine decides at runtime"
+
+   Camunda / Activiti                          ontorag-flow                CMMN / pure ACM
+   Flowable / Temporal                       (configurable)             Palantir Workshop
+                                                  ↑
+                                          default: ACM-leaning
+                                          turn the dial via:
+                                          - DecisionEngine choice
+                                          - constraints (requires, immediately_after,
+                                            mutex, at_most_once)
+                                          - skeleton (optional happy path)
+                                          - confidence cutoffs on rules
+```
+
+**ontorag-flow covers the spectrum by *changing the DecisionEngine and
+tightening constraints*, not by rewriting the runtime.** Same case
+manager, same audit log, same lifecycle — what differs is *how much
+the next action is predetermined*.
+
+- **Most BPM-like end** — `engine: rule`, all rules `confidence: 1.0`,
+  `constraints.immediately_after` chains every action, `skeleton:` lists
+  the happy path explicitly, deviations raise `ConstraintViolationError`.
+  Looks like a state-machine that happens to log everything as PROV-O.
+- **Default** — ACM-leaning: engine *recommends*, operator clicks
+  `Execute top proposal` (or `auto_execute_top_proposal: true` for
+  scripts), constraints prune the illegal moves, skeleton is *advisory*.
+- **Most ACM-like end** — `engine: llm` / `engine: causal`, no `skeleton`,
+  no `immediately_after`, just `allowed_actions` + `goal`. The engine
+  reasons over the case state and picks an action from the menu;
+  operator approves.
+
+Same code path; same operator UI. The dial is in the *process YAML*.
+
+### Why ACM-leaning by default — three architectural insights
+
+1. **LLM is the decision-maker, not the orchestrator.** Once a credible
+   LLM can read a case state + an action catalog and propose the right
+   next action with rationale, *the case for a hand-drawn BPMN graph
+   evaporates* — that graph was a stand-in for the missing decision-maker.
+   ACM lets the LLM be the decision-maker without faking it through a
+   pre-baked sequence.
+
+2. **Ontology is the guard-rail, not the spec.** TBox classes + named
+   relations + DL constraints already say what's *coherent* in the
+   domain. Re-encoding that into BPMN gateways is double bookkeeping;
+   re-encoding it into CMMN sentries is a thinner version of the same
+   problem. ontorag-flow lets the ontology *be the guard-rail* — actions
+   are anchored in classes, the engine's proposals are filtered through
+   `allowed_actions`, and ontorag itself enforces ABox consistency
+   when actions write back via `AssertTriple`.
+
+3. **Goal-driven matches how an LLM thinks.** "Diagnosed = true" is a
+   target an LLM can hold across context; "advance to node 5 in the
+   diagram" is bookkeeping the LLM has to keep separately from the
+   reasoning. Goal-driven cases are the *native* representation for an
+   LLM-in-the-loop architecture, and they happen to also be how CMMN
+   describes a case.
+
+The spectrum stays — when the domain *is* a strict pipeline (compliance
+gates, financial close), you tighten the constraints and the engine
+behaves BPM-like. The default isn't "ACM forever"; it's "*start
+adaptive, prove the rigid parts later*", which is the inverse of how
+classic BPM projects start ("draw the diagram first, discover the
+exceptions in production").
+
+### Adjacent tools — what we are and aren't
+
+- **Camunda / Activiti / Flowable**: BPMN engines. No ontology, no
+  LLM-native interface, no probabilistic decisioning. Heavy XML
+  schemas, designer-tool-centric. We compose with these when a domain
+  *is* sequence-driven — wrap them as an external `EXTERNAL_API`
+  action, don't reimplement them.
+- **Temporal / Cadence**: durable execution. Powerful for distributed
+  workflows but no ontology, no decision intelligence, code-only DSL.
+- **LangGraph / CrewAI / AutoGen**: LLM agent orchestration. No formal
+  action model, no ontology, no audit/provenance discipline.
+- **Palantir AIP Workshop**: proprietary, full Kinetic story but
+  closed.
+- **ontorag-flow**: ontology-grounded action model + pluggable decision
+  engines + MCP-native + composes with ontorag for reasoning + saga
+  compensation + write-ahead PROV-O audit. ACM-leaning by default,
+  spectrum-spanning by engine choice.
 
 ## Why a separate repo (not inside ontorag)
 
@@ -78,13 +161,25 @@ A long-running unit of work with:
 
 Cases are *not* sequential scripts. They're contexts in which the next action is *decided* at runtime by a `DecisionEngine`.
 
-### Process Definition (CMMN-inspired)
+### Process Definition (CMMN-inspired, spectrum-spanning)
 
-Not BPMN. We define:
+Not BPMN — but the YAML can describe anything from *strict sequence* to
+*free-form ACM* by which fields are populated. We define:
+
 - **Allowed action set** for this case type
 - **Preconditions** per action (when is it permissible?)
 - **Goal conditions** (when is the case complete?)
-- **Constraints** (which combinations are forbidden? mutual exclusions?)
+- **Constraints** — which combinations are forbidden / required /
+  ordered: `mutex`, `requires`, `immediately_after`, `at_most_once`
+- **`skeleton: [action_uri, ...]`** *(optional)* — a declared "happy
+  path" sequence. **Advisory by default**: the engine still proposes
+  freely, the operator still picks; but deviations are *flagged* in the
+  PROV-O activity (`deviated_from_skeleton: true`,
+  `skeleton_expected: <uri>`) so an auditor can see *where the case
+  left the rails*. To make the skeleton *strict*, add
+  `constraints.immediately_after` edges that mirror its sequence — same
+  data, different teeth. Skeleton without those edges is "this is what
+  we expect when nothing goes weird", *not* "this is what must happen".
 - **Decision engine** to drive next-action selection
 
 Stored as YAML (v0.1) or RDF using a process vocabulary (later).
@@ -323,8 +418,23 @@ Mirror ontorag's conventions exactly:
 - **Ontology-grounded actions.** Every action's domain and range are anchored in ontorag's TBox classes. No "free-floating" actions.
 - **MCP is the contract.** Both consume (call ontorag) and expose (be called by external agents) via MCP. No REST-only or RPC interfaces.
 - **Pluggable decision engines.** No hard-coded "next" logic. Decision engines are first-class swappable components.
-- **Audit by default.** PROV-O activity recorded for every action, no opt-out.
-- **Adaptive over rigid.** Cases are *contexts*, not *scripts*. CMMN-style flexibility, not BPMN sequence flow.
+- **Adaptive over rigid — but on a *spectrum*.** Cases are *contexts*,
+  not *scripts*. The default leans ACM (engine recommends, operator
+  approves, no pre-baked sequence) because LLM-in-the-loop and
+  goal-driven cases want it that way. Strict-sequence behaviour stays
+  available by *tightening* `constraints` and `skeleton`; the runtime
+  doesn't change, the data does.
+- **Provenance over replayability.** BPM wins on "replay the BPMN to
+  see what should have happened". ACM matches that and goes further by
+  recording *why*, not just *what*: every action writes a PROV-O
+  `Activity` with agent / inputs / outputs / `wasInformedBy` chain,
+  and every decision engine that opts into `explain()` records the
+  reasoning trace (which rule fired, posterior breakdown, exact LLM
+  prompt + raw reply, etc.). Adaptive *with* full forensic recall is
+  the deal — there is no opt-out path that skips audit, even on
+  failures (write-ahead audit via P7 means a pending row exists
+  *before* an externally-visible side effect runs). This is the
+  *response to BPM's strongest argument*, baked into the design.
 - **Composable with ontorag.** ontorag is the brain (reasoning), ontorag-flow is the hands (execution). Neither owns both responsibilities.
 - **Training-free** (through v0.9). Same posture as ontorag — no ML model training infrastructure. v1.0+ may revisit.
 - **Explicit side effects.** Every action declares its side effects upfront in its schema. No hidden state mutation.
@@ -446,7 +556,20 @@ Mirror ontorag's conventions exactly:
 
 - **Don't store domain ontology data.** TBox + ABox live in ontorag. ontorag-flow only stores process definitions, case state, and audit log. Domain queries go through MCP.
 - **Don't implement OWL reasoning, Bayesian, or causal inference.** Call ontorag's MCP tools.
-- **Don't be BPMN 2.0 compliant.** Camunda exists; we're not rebuilding it. Focus on ontology-aware adaptive case management. CMMN-*inspired* is the limit. (Some borrowable concepts *complement* ACM and have been added: timer events for SLA wake-ups, subprocess for case nesting, ordering constraints like `immediately_after` / `at_most_once`. These are still CMMN-style — they extend constraints and the case lifecycle, not the decision model. BPMN sequence flow + gateways + parallel multi-instance + swimlanes + visual editor remain out of scope; they conflict with `DecisionEngine` as the runtime authority.)
+- **Don't be BPMN 2.0 compliant — but *do* let the YAML reach the
+  rigid end of the spectrum.** Camunda exists; we're not rebuilding
+  its modeller, XML format, token-based execution, or BPMN-XML
+  interchange. ACM-leaning is the default. *However*, the same YAML
+  can describe a strict sequence by populating `constraints.requires`
+  / `constraints.immediately_after` / `skeleton` and choosing a
+  deterministic engine (`engine: rule` with `confidence: 1.0`
+  everywhere). That's *intentional* and matches the "Positioning"
+  spectrum section — it's the dial, not an anti-pattern.
+  *Still out of scope*: BPMN visual editor, BPMN XML import/export,
+  parallel multi-instance, swimlanes, gateways as runtime authority.
+  These conflict with `DecisionEngine` as the runtime authority.
+  Borrowable CMMN-adjacent concepts already in: timer events,
+  subprocess, ordering constraints, `skeleton`.
 - **Don't pull in LangChain, LlamaIndex, LangGraph, or LangServe.** Direct MCP and SDK calls only — consistent with ontorag's posture.
 - **Don't hard-code decision logic in Python.** DecisionEngine is pluggable; new strategies arrive as new engine implementations.
 - **Don't allow actions with undeclared side effects.** Every action declares what it touches upfront. Hidden mutation is a reviewer-blocker.
