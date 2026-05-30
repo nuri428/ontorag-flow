@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Why? — {{ case.case_uri }}{% endblock %}
+{% block content %}
+<h1>Decision engine inspector</h1>
+<p class="muted">
+  case: <code class="uri">{{ case.case_uri }}</code> —
+  <a href="/ui/cases/{{ case.case_uri }}">back to case</a>
+</p>
+<p class="muted">
+  "Why did the engine return these proposals?" This page surfaces the
+  engine's <code>trace</code> dict — the same call as
+  <code>/ui/cases/&lt;uri&gt;</code> proposals, but with the reasoning
+  shown alongside.
+</p>
+
+{% if error %}
+<div class="callout error">{{ error }}</div>
+{% endif %}
+
+{% if explanation %}
+<dl class="kv">
+  <dt>Engine</dt><dd><span class="badge">{{ explanation.engine_kind }}</span></dd>
+  <dt>Proposals</dt><dd>{{ explanation.proposals | length }}</dd>
+</dl>
+
+<h2>Proposals</h2>
+{% if not explanation.proposals %}
+  <div class="callout empty">The engine returned no proposals for the current state.</div>
+{% else %}
+<table>
+  <thead><tr><th>Action</th><th>Confidence</th><th>Params</th><th>Rationale</th></tr></thead>
+  <tbody>
+  {% for proposal in explanation.proposals %}
+    <tr>
+      <td class="uri">{{ proposal.action_uri }}</td>
+      <td>
+        {% if proposal.confidence is not none %}
+          <span class="confidence-bar"><span style="width: {{ (proposal.confidence * 100) | round(0) }}%"></span></span>
+          {{ '%.2f' | format(proposal.confidence) }}
+        {% else %}—{% endif %}
+      </td>
+      <td><code>{{ proposal.params | tojson }}</code></td>
+      <td>{{ proposal.rationale or '—' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Trace</h2>
+{% if not explanation.trace %}
+  <div class="callout empty">No trace — this engine does not implement explain().</div>
+{% else %}
+<pre>{{ explanation.trace | tojson(indent=2) }}</pre>
+{% endif %}
+{% endif %}
+{% endblock %}

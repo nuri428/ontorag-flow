@@ -81,6 +81,31 @@ The forensic page. Every PROV-O activity with timestamps, agent,
 inputs (`used`), outputs (`generated`), and the previous activity in
 the same case (`informed by`). Each row has a `Counterfactual` link.
 
+#### `/ui/cases/<uri>/explain` — Decision engine inspector
+
+The "why?" page. Reached from the case detail's `Decision engine
+proposals — why? →` link. Shows the same proposals you would see on
+the case detail plus the engine's `trace` dict:
+
+- **RuleEngine** — every rule classified as fired / unmatched /
+  skipped-because-disallowed. So you can see *which* rule fired and
+  *why other rules did not*.
+- **BayesianMpeEngine** — target proposition + action → posterior map +
+  base evidence used.
+- **CausalSimulationEngine** — interventions per candidate + posterior
+  map (interventional, not observational).
+- **LlmAgentEngine** — the full system + user prompt, the raw LLM
+  reply, and how many proposals were parsed vs returned (capped by
+  `max_proposals`). When LLM output is wrong, this is where you find
+  out whether the parser dropped something or the LLM never produced
+  it.
+- **StackedEngine** — proposer's original confidences side-by-side
+  with the validator's rescored confidences.
+- **HumanReviewEngine** — single-line "always defer" policy note.
+
+If the engine doesn't implement `explain()`, the page shows the
+proposals plus a note that there is no trace.
+
 ### Counterfactual replay (Pearl Rung 3)
 
 The audit row's **Counterfactual** link opens
@@ -244,6 +269,30 @@ RCA", "온보딩 한 건" 이렇게 생각하면 됩니다. 프로세스는 *어
 법의학(forensic) 페이지. 모든 PROV-O activity를 timestamp, agent,
 입력(`used`), 출력(`generated`), 같은 케이스의 이전 activity
 (`informed by`) 와 함께 보여줍니다. 각 행에 `Counterfactual` 링크.
+
+#### `/ui/cases/<uri>/explain` — Decision engine inspector
+
+"왜?" 페이지. case detail의 `Decision engine proposals — why? →`
+링크에서 도달. case detail에서 보는 동일한 proposals + 엔진의
+`trace` dict를 보여줍니다:
+
+- **RuleEngine** — 모든 규칙이 fired / unmatched / skipped-because-disallowed
+  로 분류. *어떤* 규칙이 발화됐고 *왜 다른 규칙은 발화 안 됐는지*
+  확인 가능.
+- **BayesianMpeEngine** — target proposition + action → posterior
+  map + 사용된 base evidence.
+- **CausalSimulationEngine** — candidate별 intervention + posterior
+  map (interventional, observational 아님).
+- **LlmAgentEngine** — system + user prompt 전체, raw LLM 답변,
+  파싱된 proposals 수 vs 반환된 수 (`max_proposals` cap). LLM
+  출력이 잘못됐을 때 *파서가 뭘 빠뜨렸는지 vs LLM이 애초에 생성을
+  안 했는지* 가 여기서 드러납니다.
+- **StackedEngine** — proposer의 원래 confidence와 validator가
+  rescored한 confidence를 나란히.
+- **HumanReviewEngine** — "항상 사람에게 위임" 한 줄 policy.
+
+엔진이 `explain()` 을 구현하지 않으면 proposals만 보이고 trace가
+없다는 안내가 표시됩니다.
 
 ### Counterfactual replay (Pearl Rung 3)
 

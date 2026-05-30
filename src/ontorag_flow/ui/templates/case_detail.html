@@ -49,7 +49,7 @@
 <pre>properties: {{ case.state.properties | tojson(indent=2) }}
 goal:       {{ case.state.goal | tojson(indent=2) if case.state.goal else 'null' }}</pre>
 
-<h2>Decision engine proposals</h2>
+<h2>Decision engine proposals — <a href="/ui/cases/{{ case.case_uri }}/explain">why? →</a></h2>
 {% if proposals_error %}
   <div class="callout">{{ proposals_error }}</div>
 {% elif not proposals %}

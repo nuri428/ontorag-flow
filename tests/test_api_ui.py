@@ -329,6 +329,45 @@ def test_counterfactual_non_dict_params_rejected(client: TestClient) -> None:
     assert "params must be a JSON object" in resp.text
 
 
+def test_explain_page_renders_rule_engine_trace(client: TestClient) -> None:
+    """RuleEngine implements explain(); the trace shows rules_fired."""
+
+    client.post("/processes", json=PROCESS)
+    case_uri = client.post("/cases", json={"process_uri": "urn:p:ui"}).json()["case_uri"]
+
+    resp = client.get(f"/ui/cases/{case_uri}/explain")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Decision engine inspector" in body
+    assert "RuleEngine" in body
+    # PROCESS has one rule "assess unknown" that fires for initial_state.
+    assert "assess unknown" in body
+    assert "rules_fired" in body
+
+
+def test_explain_page_link_appears_on_case_detail(client: TestClient) -> None:
+    client.post("/processes", json=PROCESS)
+    case_uri = client.post("/cases", json={"process_uri": "urn:p:ui"}).json()["case_uri"]
+    body = client.get(f"/ui/cases/{case_uri}").text
+    assert f"/ui/cases/{case_uri}/explain" in body
+
+
+def test_explain_page_404_for_unknown_case(client: TestClient) -> None:
+    assert client.get("/ui/cases/urn:nope/explain").status_code == 404
+
+
+def test_explain_page_surfaces_engine_unavailable_inline(client: TestClient) -> None:
+    """LLM engine without an LLM client → 'Decision engine unavailable' callout."""
+
+    proc = {**PROCESS, "process_uri": "urn:p:explain-llm", "engine": "llm"}
+    client.post("/processes", json=proc)
+    case_uri = client.post("/cases", json={"process_uri": "urn:p:explain-llm"}).json()["case_uri"]
+
+    resp = client.get(f"/ui/cases/{case_uri}/explain")
+    assert resp.status_code == 200
+    assert "Decision engine unavailable" in resp.text
+
+
 def test_counterfactual_submit_404_for_unknown_case(client: TestClient) -> None:
     resp = client.post(
         "/ui/cases/urn:no:such:case/counterfactual",

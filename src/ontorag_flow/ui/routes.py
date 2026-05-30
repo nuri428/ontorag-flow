@@ -245,6 +245,41 @@ async def case_audit(
     )
 
 
+# --- engine inspector ("why did the engine recommend that?") ------------
+
+
+@router.get(
+    "/cases/{case_uri}/explain",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def case_explain(
+    request: Request,
+    case_uri: str,
+    manager: CaseManager = Depends(get_case_manager),
+) -> HTMLResponse:
+    """Decision-engine inspector — proposals plus the engine's ``trace`` dict."""
+
+    case = await manager.get_case(case_uri)
+    if case is None:
+        raise HTTPException(status_code=404, detail=f"No such case: {case_uri}")
+
+    explanation = None
+    error: str | None = None
+    try:
+        explanation = await manager.explain_next(case_uri)
+    except (NoEngineConfiguredError, EngineUnavailableError) as exc:
+        error = f"Decision engine unavailable: {exc}"
+    except CaseManagerError as exc:
+        error = f"{type(exc).__name__}: {exc}"
+
+    return templates.TemplateResponse(
+        request,
+        "explain.html",
+        _ctx(case=case, explanation=explanation, error=error),
+    )
+
+
 # --- counterfactual (Pearl Rung 3) ---------------------------------------
 
 
