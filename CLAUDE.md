@@ -458,7 +458,7 @@ Mirror ontorag's conventions exactly:
 
 ## Open questions (decide when reached)
 
-- **Process model serialization format**: YAML (simple, v0.1 default) vs custom RDF vocabulary (semantic, v0.5+) vs both? Lean toward "YAML for getting started, RDF as optional richer representation".
+- **Process model serialization format** — **DECIDED: both**. YAML is the day-1 default for fast iteration; RDF (Turtle by default, JSON-LD also) is offered side-by-side via `core/process_rdf.py` for users who want the process model to live in ontorag's ABox. CLI `ontorag-flow process load <path>` dispatches on suffix (`.ttl`/`.rdf`/`.n3`/`.jsonld`/`.nt` → RDF; anything else → YAML). Every `ProcessDefinition` field round-trips through Turtle and JSON-LD, including `engine` / `causal` / `constraints` / `timer_events` added in v0.7–v0.9. Vocabulary is `urn:ontorag-flow:process#`; structured dicts/lists carried as JSON-string literals (`of:goalJson`, `of:rulesJson`, etc.) until a fully modelled rule vocabulary lands.
 - **Case state representation**: tabular key-value (relational-friendly) vs RDF triples (ontology-friendly) vs hybrid (state as key-value with optional triple projection)? Hybrid likely.
 - **Decision engine arbitration**: when multiple engines propose, what's the conflict policy? Priority order, voting, LLM tie-breaker, human escalation?
 - **Action atomicity**: single-action transactions only (simple), or multi-action sagas (powerful)? Sagas in v0.7.

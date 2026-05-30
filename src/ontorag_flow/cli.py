@@ -201,9 +201,10 @@ def serve(
 def process_load(
     path: Path = typer.Argument(..., help="Path to a process definition YAML file."),
 ) -> None:
-    """Load a process definition from YAML (or Turtle .ttl/.rdf) and persist it."""
+    """Load a process definition from YAML or RDF (.ttl/.rdf/.n3/.jsonld/.nt) and persist it."""
 
-    loader = load_process_rdf if path.suffix.lower() in {".ttl", ".rdf", ".n3"} else load_process
+    rdf_suffixes = {".ttl", ".rdf", ".n3", ".xml", ".jsonld", ".json-ld", ".nt"}
+    loader = load_process_rdf if path.suffix.lower() in rdf_suffixes else load_process
     try:
         process = loader(path)
     except ProcessParseError as exc:
