@@ -19,6 +19,7 @@ from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.core.registry import ActionRegistry
 from ontorag_flow.engines.base import DecisionEngine
 from ontorag_flow.engines.bayesian import BayesianMpeEngine, SupportsToolCall
+from ontorag_flow.engines.cascade import CascadeEngine
 from ontorag_flow.engines.causal import CausalSimulationEngine, StackedEngine
 from ontorag_flow.engines.human import HumanReviewEngine
 from ontorag_flow.engines.llm_agent import LlmAgentEngine, LlmClient
@@ -29,8 +30,9 @@ logger = get_logger(__name__)
 
 __all__ = ["EngineResolver", "EngineUnavailableError"]
 
-_VALID_KINDS = frozenset({"rule", "bayesian", "causal", "llm", "human", "stacked"})
+_VALID_KINDS = frozenset({"rule", "bayesian", "causal", "llm", "human", "stacked", "cascade"})
 _STACKED_PROPOSER_KINDS = frozenset({"rule", "bayesian", "llm", "human"})
+_CASCADE_KINDS = frozenset({"rule", "bayesian", "causal", "llm", "human"})
 
 
 class EngineUnavailableError(RuntimeError):
@@ -122,7 +124,42 @@ class EngineResolver:
             return LlmAgentEngine(self._llm_client, registry=self._registry)
         if kind == "stacked":
             return self._build_stacked(process)
+        if kind == "cascade":
+            return self._build_cascade(process)
         raise EngineUnavailableError(f"Unsupported engine kind: {kind!r}")
+
+    def _build_cascade(self, process: ProcessDefinition) -> CascadeEngine:
+        """Build a :class:`CascadeEngine` from ``process.arbitration.sequence``.
+
+        Required shape::
+
+            engine: cascade
+            arbitration:
+              sequence: [llm, rule, human]   # ordered, first non-empty wins
+
+        Each sub-engine is constructed through the same resolver so its own
+        client-missing errors surface unchanged.
+        """
+
+        config = process.arbitration or {}
+        sequence = config.get("sequence")
+        if not isinstance(sequence, list) or not sequence:
+            raise EngineUnavailableError(
+                "Cascade engine needs arbitration.sequence as a non-empty list of "
+                f"engine kinds; got {sequence!r}."
+            )
+
+        engines: list[tuple[str, DecisionEngine]] = []
+        for entry in sequence:
+            kind = str(entry).lower()
+            if kind not in _CASCADE_KINDS:
+                raise EngineUnavailableError(
+                    f"Cascade sequence entry {entry!r} is not a valid engine kind; "
+                    f"expected one of {sorted(_CASCADE_KINDS)}."
+                )
+            proxy = process.model_copy(update={"engine": kind, "arbitration": None})
+            engines.append((kind, self.for_process(proxy)))
+        return CascadeEngine(engines)
 
     def _build_stacked(self, process: ProcessDefinition) -> StackedEngine:
         """Construct a :class:`StackedEngine` from ``process.arbitration``.

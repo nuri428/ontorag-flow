@@ -179,6 +179,32 @@
 
   {% elif kind == "HumanReviewEngine" %}
     <p class="muted">{{ trace.policy }}</p>
+
+  {% elif kind == "CascadeEngine" %}
+    <p class="muted">
+      Tried in order: {{ trace.sequence | join(' → ') }} ·
+      <strong>Chosen: {{ trace.chosen or 'none' }}</strong>
+    </p>
+    <table>
+      <thead><tr><th>Engine</th><th>Proposals returned</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for attempt in trace.attempts %}
+        <tr>
+          <td><span class="badge">{{ attempt.kind }}</span></td>
+          <td>{{ attempt.count }}</td>
+          <td>
+            {% if attempt.kind == trace.chosen %}
+              <span class="badge open">chosen</span>
+            {% elif attempt.count == 0 %}
+              <span class="badge">empty → fallback</span>
+            {% else %}
+              <span class="badge">would have fired</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
   {% endif %}
 
   <details>

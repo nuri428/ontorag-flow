@@ -170,3 +170,44 @@ def test_stacked_defaults_validator_to_causal_when_unspecified() -> None:
         arbitration={"proposer": "rule"},
     )
     assert isinstance(resolver.for_process(process), StackedEngine)
+
+
+# --- cascade engine arbitration -----------------------------------------
+
+
+def test_cascade_kind_recognised() -> None:
+    resolver = EngineResolver()
+    assert resolver.kind_for(_proc(engine="cascade")) == "cascade"
+
+
+def test_cascade_builds_from_sequence() -> None:
+    from ontorag_flow.engines.cascade import CascadeEngine
+
+    resolver = EngineResolver(llm_client=FakeLlm())
+    process = _proc(
+        engine="cascade",
+        rules=[_RULE],
+        arbitration={"sequence": ["llm", "rule", "human"]},
+    )
+    engine = resolver.for_process(process)
+    assert isinstance(engine, CascadeEngine)
+
+
+def test_cascade_requires_sequence() -> None:
+    resolver = EngineResolver()
+    with pytest.raises(EngineUnavailableError, match="sequence"):
+        resolver.for_process(_proc(engine="cascade", arbitration={}))
+
+
+def test_cascade_rejects_unknown_kind_in_sequence() -> None:
+    resolver = EngineResolver(llm_client=FakeLlm())
+    with pytest.raises(EngineUnavailableError, match="not a valid engine kind"):
+        resolver.for_process(_proc(engine="cascade", arbitration={"sequence": ["llm", "magic"]}))
+
+
+def test_cascade_propagates_subengine_client_error() -> None:
+    """Asking for 'llm' in the cascade without an LLM client surfaces that error."""
+
+    resolver = EngineResolver()  # no LLM client
+    with pytest.raises(EngineUnavailableError, match="LLM"):
+        resolver.for_process(_proc(engine="cascade", arbitration={"sequence": ["llm", "rule"]}))

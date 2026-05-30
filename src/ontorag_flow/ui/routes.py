@@ -82,7 +82,6 @@ def _build_process_svg(process: Any) -> str:
         y = pad + row * (node_h + gap_y)
         positions[action_uri] = (x, y)
 
-    timer_targets = {entry.get("action") for entry in timer_events if isinstance(entry, dict)}
     rows = (len(actions) + cols - 1) // cols if actions else 1
     width = pad * 2 + cols * node_w + (cols - 1) * gap_x
     height = pad * 2 + rows * (node_h + gap_y)
