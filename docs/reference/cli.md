@@ -42,6 +42,7 @@ Every command supports `--help` for flags + defaults. This page is the
 | `ontorag-flow case fork <case_uri> [--new-uri URI]` | New case copying state + history from a source |
 | `ontorag-flow case subcase <parent_uri> <process_uri> [-s K=V]` | Spawn a child case under a parent |
 | `ontorag-flow case tick` | Fire elapsed timer events across all open cases |
+| `ontorag-flow case auto-run-all` | Auto-execute the top proposal on every open case that passes the [execute_policy gate](../security.md#s3-runtime-auto-run-all) |
 | `ontorag-flow case counterfactual ...` | "What if Y at step X?" via the causal engine |
 
 ## `audit`

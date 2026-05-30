@@ -25,6 +25,7 @@ server is running; MCP transport is at `/mcp`.
 | `POST /cases/{uri}/fork` | `fork_case` | New case copying state + history |
 | `POST /cases/{uri}/subcase` | `create_subcase` | Spawn child case |
 | `POST /cases/tick` | `tick_timers` | Fire elapsed timer events globally |
+| `POST /cases/auto-run-all` | `auto_run_all` | Auto-execute top proposal on every open case passing the execute_policy + auto_execute_disabled gate (cron / scheduler target) |
 | `POST /cases/{uri}/counterfactual` | `counterfactual_replay` | "What if Y at step X?" |
 | `GET /cases/{uri}/audit` | `get_audit_trail` | PROV-O activities for one case |
 | `GET /audit/aggregate` | `aggregate_audit` | Cross-case bucket counts (group_by + optional process filter + limit) |
