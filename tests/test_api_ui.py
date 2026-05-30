@@ -368,6 +368,41 @@ def test_explain_page_surfaces_engine_unavailable_inline(client: TestClient) -> 
     assert "Decision engine unavailable" in resp.text
 
 
+def test_explain_page_renders_rule_engine_structured_cards(client: TestClient) -> None:
+    """The trace section now uses engine-specific cards, not just JSON."""
+
+    proc = {
+        **PROCESS,
+        "process_uri": "urn:p:explain-rule",
+        "rules": [
+            {
+                "name": "fires now",
+                "when": {"triage_level": "unknown"},
+                "then": {"action": UPDATE, "params": {"key": "k", "value": "v"}},
+                "confidence": 0.7,
+            },
+            {
+                "name": "never fires",
+                "when": {"triage_level": "critical"},
+                "then": {"action": UPDATE},
+                "confidence": 0.9,
+            },
+        ],
+    }
+    client.post("/processes", json=proc)
+    case_uri = client.post("/cases", json={"process_uri": "urn:p:explain-rule"}).json()["case_uri"]
+
+    body = client.get(f"/ui/cases/{case_uri}/explain").text
+    # Structured cards, not raw JSON:
+    assert "Rules fired" in body
+    assert "fires now" in body
+    assert "Rules unmatched" in body
+    assert "never fires" in body
+    # Raw JSON still available in a fold:
+    assert "<summary" in body
+    assert "Raw trace (JSON)" in body
+
+
 def test_counterfactual_submit_404_for_unknown_case(client: TestClient) -> None:
     resp = client.post(
         "/ui/cases/urn:no:such:case/counterfactual",

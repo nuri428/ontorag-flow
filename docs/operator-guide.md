@@ -106,6 +106,12 @@ the case detail plus the engine's `trace` dict:
 If the engine doesn't implement `explain()`, the page shows the
 proposals plus a note that there is no trace.
 
+The trace is rendered with engine-specific cards (rules-fired table,
+posterior breakdown bars, prompt collapsibles, proposer-vs-validator
+comparison), and the full JSON is always available in a `Raw trace
+(JSON)` fold so nothing is hidden — the cards just make the common
+case readable.
+
 ### Counterfactual replay (Pearl Rung 3)
 
 The audit row's **Counterfactual** link opens
@@ -293,6 +299,11 @@ RCA", "온보딩 한 건" 이렇게 생각하면 됩니다. 프로세스는 *어
 
 엔진이 `explain()` 을 구현하지 않으면 proposals만 보이고 trace가
 없다는 안내가 표시됩니다.
+
+Trace는 엔진별 카드(규칙-발화 표, posterior breakdown 막대, prompt
+collapsible, proposer-vs-validator 비교)로 렌더링되며, 원본 JSON은
+항상 `Raw trace (JSON)` fold로 함께 제공됩니다 — 카드는 흔한 경우를
+*읽기 쉽게* 할 뿐, 정보를 숨기지 않습니다.
 
 ### Counterfactual replay (Pearl Rung 3)
 

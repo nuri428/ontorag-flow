@@ -51,7 +51,129 @@
 {% if not explanation.trace %}
   <div class="callout empty">No trace — this engine does not implement explain().</div>
 {% else %}
-<pre>{{ explanation.trace | tojson(indent=2) }}</pre>
+  {% set kind = explanation.engine_kind %}
+  {% set trace = explanation.trace %}
+
+  {% if kind == "RuleEngine" %}
+    <p class="muted">
+      <strong>{{ trace.rules_fired | length }}</strong> rule(s) fired of
+      <strong>{{ trace.rules_evaluated }}</strong> evaluated;
+      {{ trace.rules_unmatched | length }} unmatched,
+      {{ trace.rules_skipped_disallowed | length }} skipped (disallowed action).
+    </p>
+    {% if trace.rules_fired %}
+    <h3>Rules fired</h3>
+    <table>
+      <thead><tr><th>Name</th><th>When</th><th>Confidence</th></tr></thead>
+      <tbody>
+      {% for rule in trace.rules_fired %}
+        <tr>
+          <td>{{ rule.name }}</td>
+          <td><code>{{ rule.when | tojson }}</code></td>
+          <td>{{ '%.2f' | format(rule.confidence) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if trace.rules_unmatched %}
+    <h3>Rules unmatched</h3>
+    <p class="muted">{{ trace.rules_unmatched | join(', ') }}</p>
+    {% endif %}
+    {% if trace.rules_skipped_disallowed %}
+    <h3>Rules skipped (action not in process.allowed_actions)</h3>
+    <p class="muted">{{ trace.rules_skipped_disallowed | join(', ') }}</p>
+    {% endif %}
+
+  {% elif kind == "BayesianMpeEngine" or kind == "CausalSimulationEngine" %}
+    <dl class="kv">
+      <dt>Target</dt><dd><code>{{ trace.target | tojson }}</code></dd>
+      {% if trace.base_evidence is defined %}
+      <dt>Base evidence</dt><dd><code>{{ trace.base_evidence | tojson }}</code></dd>
+      {% endif %}
+    </dl>
+    {% if trace.interventions_by_action is defined %}
+    <h3>Interventions per candidate</h3>
+    <table>
+      <thead><tr><th>Action</th><th>Intervention <code>do(...)</code></th></tr></thead>
+      <tbody>
+      {% for action_uri, intervention in trace.interventions_by_action.items() %}
+        <tr><td class="uri">{{ action_uri }}</td><td><code>{{ intervention | tojson }}</code></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    <h3>Posterior breakdown</h3>
+    <table>
+      <thead><tr><th>Action</th><th>Posterior</th></tr></thead>
+      <tbody>
+      {% for action_uri, posterior in trace.posterior_by_action.items() %}
+        <tr>
+          <td class="uri">{{ action_uri }}</td>
+          <td>
+            {% if posterior is not none %}
+              <span class="confidence-bar"><span style="width: {{ (posterior * 100) | round(0) }}%"></span></span>
+              {{ '%.3f' | format(posterior) }}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+  {% elif kind == "LlmAgentEngine" %}
+    {% if trace.reason is defined %}
+    <div class="callout">{{ trace.reason }}</div>
+    {% else %}
+    <p class="muted">
+      LLM returned <strong>{{ trace.parsed_count }}</strong> proposal(s);
+      capped at <strong>{{ trace.max_proposals }}</strong>.
+    </p>
+    <details>
+      <summary>System prompt</summary>
+      <pre>{{ trace.system_prompt }}</pre>
+    </details>
+    <details open>
+      <summary>User prompt</summary>
+      <pre>{{ trace.user_prompt }}</pre>
+    </details>
+    <details>
+      <summary>Raw reply</summary>
+      <pre>{{ trace.raw_reply }}</pre>
+    </details>
+    {% endif %}
+
+  {% elif kind == "StackedEngine" %}
+    <p class="muted">
+      Proposer: <span class="badge">{{ trace.proposer_kind }}</span>
+      → Validator: <span class="badge">{{ trace.validator_kind }}</span>
+    </p>
+    <table>
+      <thead><tr><th>Action</th><th>Proposer confidence</th><th>Validator confidence</th></tr></thead>
+      <tbody>
+      {% set rescored = {} %}
+      {% for r in trace.validator_rescored %}{% set _ = rescored.update({r.action: r.confidence}) %}{% endfor %}
+      {% for p in trace.proposer_original %}
+        <tr>
+          <td class="uri">{{ p.action }}</td>
+          <td>{% if p.confidence is not none %}{{ '%.3f' | format(p.confidence) }}{% else %}—{% endif %}</td>
+          <td>
+            {% set v = rescored.get(p.action) %}
+            {% if v is not none %}{{ '%.3f' | format(v) }}{% else %}—{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+  {% elif kind == "HumanReviewEngine" %}
+    <p class="muted">{{ trace.policy }}</p>
+  {% endif %}
+
+  <details>
+    <summary class="muted">Raw trace (JSON)</summary>
+    <pre>{{ trace | tojson(indent=2) }}</pre>
+  </details>
 {% endif %}
 {% endif %}
 {% endblock %}
