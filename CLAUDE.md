@@ -463,7 +463,7 @@ Mirror ontorag's conventions exactly:
 - **Decision engine arbitration**: when multiple engines propose, what's the conflict policy? Priority order, voting, LLM tie-breaker, human escalation?
 - **Action atomicity**: single-action transactions only (simple), or multi-action sagas (powerful)? Sagas in v0.7.
 - **External action registration**: webhooks vs plugin Python files vs RPC? Plugin Python files first; webhook adapter later.
-- **Write-back to ontorag**: when an action asserts new triples, should that go through ontorag's `load_rdf` (slow) or a faster path? Probably a new MCP tool `assert_triple` on ontorag side, requested as v0.7.x.
+- **Write-back to ontorag** — **DECIDED**: the client-side wrapper and the `AssertTriple` / `RetractTriple` actions both target `assert_triple` / `retract_triple` MCP tools, not `load_rdf`. Single triple per call, no RDF serialisation, typed at the tool boundary, with the saga `compensate` hook wired to the symmetric pair. Actions are registered *only when* an `OntoragClient` is live (composition root in `api/main.py` calls `with_triple_actions(...)` after a successful `maybe_connect_ontorag`). The ontorag side still needs to expose these tools — until v0.7.x, executing one raises `OntoragClientError("ontorag tool 'assert_triple' returned an error.")` and the executor's write-ahead PROV-O row stays at `failed`. No silent skip.
 - **Cross-repo testing**: how do we CI-test ontorag-flow against ontorag without coupling repos? Fake MCP server fixture in tests/; live integration test in a separate suite.
 - **Versioning ontorag compatibility**: pin to specific ontorag MCP tool versions? Use a compatibility matrix in README.
 

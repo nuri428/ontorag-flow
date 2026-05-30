@@ -248,6 +248,8 @@ docstrings; this section is the index.
 | `urn:ontorag-flow:action:UpdateCaseProperty` | CASE_STATE | Set one property on the case state |
 | `urn:ontorag-flow:action:SetGoal` | CASE_STATE | Declare / replace the goal predicate |
 | `urn:ontorag-flow:action:RequestHumanReview` | HUMAN + CASE_STATE | Mark the case for human review — auto-suspends |
+| `urn:ontorag-flow:action:AssertTriple` | ABOX_WRITE | Write one (s, p, o) triple to ontorag's ABox (only registered when an OntoragClient is live) |
+| `urn:ontorag-flow:action:RetractTriple` | ABOX_WRITE | Remove one (s, p, o) triple from ontorag's ABox (saga-compensates each other with AssertTriple) |
 
 ---
 
@@ -303,6 +305,8 @@ docstrings; this section is the index.
 | `urn:ontorag-flow:action:UpdateCaseProperty` | CASE_STATE | 케이스 상태에 속성 하나를 설정 |
 | `urn:ontorag-flow:action:SetGoal` | CASE_STATE | 목표 술어를 선언 / 교체 |
 | `urn:ontorag-flow:action:RequestHumanReview` | HUMAN + CASE_STATE | 사람 검토 대상으로 표시 — 자동 suspend |
+| `urn:ontorag-flow:action:AssertTriple` | ABOX_WRITE | ontorag의 ABox에 (s, p, o) 트리플 하나를 기록 (OntoragClient가 살아 있을 때만 등록) |
+| `urn:ontorag-flow:action:RetractTriple` | ABOX_WRITE | ontorag의 ABox에서 (s, p, o) 트리플 하나를 제거 (AssertTriple과 서로 saga-compensate) |
 
 ---
 
