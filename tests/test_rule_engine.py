@@ -70,3 +70,15 @@ async def test_empty_when_always_fires() -> None:
     proposals = await RuleEngine.from_process(process).propose_next(_case({"anything": 1}), process)
     assert len(proposals) == 1
     assert proposals[0].rationale == "always"
+
+
+def test_unknown_operator_in_rule_is_rejected_at_parse_time() -> None:
+    # Typo'd 'gtt' previously made matching silently False, hiding the rule;
+    # the validator now surfaces it as a ValidationError instead.
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    rules = [{"name": "typo", "when": {"sev": {"gtt": 7}}, "then": {"action": UPDATE}}]
+    process = _process(rules)
+    with _pytest.raises(ValidationError):
+        RuleEngine.from_process(process)

@@ -55,13 +55,6 @@ def test_actions_page_lists_builtins(client: TestClient) -> None:
     assert "case_state" in resp.text  # side-effect badge text
 
 
-def test_processes_page_lists_loaded(client: TestClient) -> None:
-    client.post("/processes", json=PROCESS)
-    resp = client.get("/ui/processes")
-    assert resp.status_code == 200
-    assert "urn:p:ui" in resp.text
-
-
 def test_case_detail_renders_with_proposals(client: TestClient) -> None:
     client.post("/processes", json=PROCESS)
     case_uri = client.post("/cases", json={"process_uri": "urn:p:ui"}).json()["case_uri"]

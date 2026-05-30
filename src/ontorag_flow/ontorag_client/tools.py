@@ -42,12 +42,6 @@ async def compute_posterior(
     )
 
 
-async def mpe(client: OntoragClient, evidence: dict[str, Any]) -> Any:
-    """Most Probable Explanation given evidence (requires ontorag v0.7)."""
-
-    return await client.call_tool("mpe", {"evidence": evidence})
-
-
 async def do_query(
     client: OntoragClient, intervention: dict[str, Any], query: Any
 ) -> Any:

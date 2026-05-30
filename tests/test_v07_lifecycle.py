@@ -131,17 +131,6 @@ async def test_fork_copies_state_and_history(case_manager_sqlite: CaseManager) -
     assert forked.status is CaseStatus.OPEN
 
 
-async def test_fork_without_history(case_manager_sqlite: CaseManager) -> None:
-    manager = case_manager_sqlite
-    await manager.register_process(TRIAGE)
-    case = await manager.create_case("urn:p:triage")
-    case, _ = await manager.execute_action(case.case_uri, UPDATE, {"key": "a", "value": 1})
-
-    forked = await manager.fork(case.case_uri, copy_history=False)
-    assert forked.history == ()
-    assert forked.state.properties == {"a": 1}  # state still copied
-
-
 # --- constraints -----------------------------------------------------------
 
 

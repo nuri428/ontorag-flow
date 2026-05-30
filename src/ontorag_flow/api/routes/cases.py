@@ -145,7 +145,6 @@ class CompensateRequest(BaseModel):
 
 class ForkRequest(BaseModel):
     new_uri: str | None = None
-    copy_history: bool = True
 
 
 @router.post("/{case_uri}/compensate", operation_id="compensate_case", response_model=Case)
@@ -236,8 +235,6 @@ async def fork_case(
     """Fork a case into a new one (same process, copied state/history)."""
 
     try:
-        return await manager.fork(
-            case_uri, new_uri=body.new_uri, copy_history=body.copy_history
-        )
+        return await manager.fork(case_uri, new_uri=body.new_uri)
     except CaseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

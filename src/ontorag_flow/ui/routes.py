@@ -62,18 +62,6 @@ async def dashboard(
     )
 
 
-@router.get("/processes", response_class=HTMLResponse, include_in_schema=False)
-async def processes_page(
-    request: Request, manager: CaseManager = Depends(get_case_manager)
-) -> HTMLResponse:
-    """List registered process definitions."""
-
-    processes = await manager.list_processes()
-    return templates.TemplateResponse(
-        request, "processes.html", _ctx(processes=processes)
-    )
-
-
 @router.get("/actions", response_class=HTMLResponse, include_in_schema=False)
 async def actions_page(
     request: Request, registry: ActionRegistry = Depends(get_registry)

@@ -19,6 +19,7 @@ from ontorag_flow.core.executor import ActionExecutor
 from ontorag_flow.core.case_manager import CaseManager
 from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.engines.selection import EngineResolver
+from ontorag_flow.engines.wiring import build_llm_client, maybe_connect_ontorag
 from ontorag_flow.log import get_logger
 from ontorag_flow.stores.sqlite import SqliteStore
 from ontorag_flow.ui.routes import router as ui_router
@@ -56,8 +57,8 @@ def create_app(
         if owns_store:
             await active_store.connect()
 
-        llm_client = _build_llm_client(settings)
-        ontorag_client = await _maybe_connect_ontorag(settings)
+        llm_client = build_llm_client(settings)
+        ontorag_client = await maybe_connect_ontorag(settings)
         resolver = EngineResolver(
             registry=resolved_registry,
             ontorag_client=ontorag_client,
@@ -103,32 +104,6 @@ def create_app(
         _mount_mcp(app)
 
     return app
-
-
-def _build_llm_client(settings):  # type: ignore[no-untyped-def]
-    """Construct an LLM client from settings, or None if no provider is set."""
-
-    if not settings.llm_provider:
-        return None
-    from ontorag_flow.engines.llm_providers import make_llm_client
-
-    return make_llm_client(settings.llm_provider, settings.llm_model)
-
-
-async def _maybe_connect_ontorag(settings):  # type: ignore[no-untyped-def]
-    """Open an ontorag MCP connection if enabled; None if disabled/unreachable."""
-
-    if not settings.connect_ontorag:
-        return None
-    from ontorag_flow.ontorag_client import OntoragClient, OntoragClientError
-
-    client = OntoragClient(settings.ontorag_mcp_url)
-    try:
-        await client.connect()
-    except OntoragClientError as exc:
-        logger.warning("ontorag unreachable; Bayesian engine disabled: %s", exc)
-        return None
-    return client
 
 
 def _mount_mcp(app: FastAPI) -> None:

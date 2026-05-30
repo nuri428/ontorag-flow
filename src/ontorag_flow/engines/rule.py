@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case
@@ -67,6 +67,25 @@ class Rule(BaseModel):
     then: RuleOutcome
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     rationale: str | None = None
+
+    @model_validator(mode="after")
+    def _reject_unknown_operators(self) -> Rule:
+        """Fail loudly at parse time on typo'd operator names (e.g. ``gtt``).
+
+        Without this guard, an unknown operator made the condition silently
+        evaluate to False — the rule would simply never fire and decision-making
+        would go wrong with no signal. We surface the typo here instead.
+        """
+
+        for key, expected in self.when.items():
+            if isinstance(expected, dict):
+                unknown = sorted(op for op in expected if op not in _OPERATORS)
+                if unknown:
+                    raise ValueError(
+                        f"Unknown operator(s) {unknown} in rule {self.name!r} "
+                        f"condition for {key!r}; valid: {sorted(_OPERATORS)}."
+                    )
+        return self
 
 
 def _match_condition(actual: Any, expected: Any) -> bool:

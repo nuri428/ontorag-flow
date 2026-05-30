@@ -23,6 +23,7 @@ __all__ = [
 ]
 
 _MAX_TOKENS = 1024
+_DEFAULT_TIMEOUT_SECONDS = 30.0
 
 
 class AnthropicClient:
@@ -40,7 +41,7 @@ class AnthropicClient:
                 "anthropic is not installed; install the 'llm' extra."
             ) from exc
 
-        client = AsyncAnthropic(api_key=self._api_key)
+        client = AsyncAnthropic(api_key=self._api_key, timeout=_DEFAULT_TIMEOUT_SECONDS)
         message = await client.messages.create(
             model=self._model,
             max_tokens=_MAX_TOKENS,
@@ -67,7 +68,7 @@ class OpenAIClient:
                 "openai is not installed; install the 'llm' extra."
             ) from exc
 
-        client = AsyncOpenAI(api_key=self._api_key)
+        client = AsyncOpenAI(api_key=self._api_key, timeout=_DEFAULT_TIMEOUT_SECONDS)
         response = await client.chat.completions.create(
             model=self._model,
             messages=[

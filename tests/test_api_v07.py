@@ -65,7 +65,7 @@ def test_fork_endpoint_creates_new_case(client: TestClient) -> None:
         json={"action_uri": UPDATE, "params": {"key": "a", "value": 1}},
     )
 
-    resp = client.post(f"/cases/{source}/fork", json={"copy_history": True})
+    resp = client.post(f"/cases/{source}/fork", json={})
     assert resp.status_code == 200
     forked = resp.json()
     assert forked["case_uri"] != source

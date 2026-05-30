@@ -464,15 +464,12 @@ class CaseManager:
         case_uri: str,
         *,
         new_uri: str | None = None,
-        copy_history: bool = True,
     ) -> Case:
-        """Create a new open case copying state (and optionally history) from one source.
+        """Create a new open case copying state and history from one source.
 
         Args:
             case_uri: The case to fork from.
             new_uri: URI for the new case; auto-generated if omitted.
-            copy_history: When True, copy the source's history events; when
-                False, start with empty history.
         """
 
         source = await self._require_case(case_uri)
@@ -483,7 +480,7 @@ class CaseManager:
             process_uri=source.process_uri,
             state=new_state,
             status=CaseStatus.OPEN,
-            history=source.history if copy_history else (),
+            history=source.history,
         )
         await self._cases.create_case(new_case)
         logger.info("Forked case %s -> %s", case_uri, target_uri)

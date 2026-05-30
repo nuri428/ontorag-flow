@@ -31,6 +31,7 @@ from ontorag_flow.core.provenance import ExportFormat, render
 from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.core.state import EMPTY_STATE
 from ontorag_flow.engines.selection import EngineResolver, EngineUnavailableError
+from ontorag_flow.engines.wiring import build_llm_client, maybe_connect_ontorag
 from ontorag_flow.log import configure_logging
 from ontorag_flow.stores.sqlite import SqliteStore
 
@@ -381,15 +382,12 @@ def case_resume(case_uri: str = typer.Argument(..., help="Case URI.")) -> None:
 def case_fork(
     case_uri: str = typer.Argument(..., help="Case URI to fork from."),
     new_uri: str | None = typer.Option(None, "--new-uri", help="URI for the forked case."),
-    no_history: bool = typer.Option(False, "--no-history", help="Do not copy source history."),
 ) -> None:
-    """Create a new case copying state (and optionally history) from one source."""
+    """Create a new case copying state and history from one source."""
 
     try:
         case = asyncio.run(
-            _with_manager(
-                lambda m: m.fork(case_uri, new_uri=new_uri, copy_history=not no_history)
-            )
+            _with_manager(lambda m: m.fork(case_uri, new_uri=new_uri))
         )
     except CaseManagerError as exc:
         console.print(f"[red]{type(exc).__name__}:[/] {exc}")
@@ -496,11 +494,14 @@ async def _with_manager(fn):
     ontorag_client = None
     try:
         registry = default_registry()
-        ontorag_client = await _cli_ontorag(settings)
+        ontorag_client = await maybe_connect_ontorag(
+            settings,
+            on_error=lambda message: console.print(f"[yellow]{message}[/]"),
+        )
         resolver = EngineResolver(
             registry=registry,
             ontorag_client=ontorag_client,
-            llm_client=_cli_llm(settings),
+            llm_client=build_llm_client(settings),
         )
         executor = ActionExecutor(audit_store=store, agent=settings.agent_id)
         manager = CaseManager(
@@ -515,32 +516,6 @@ async def _with_manager(fn):
         if ontorag_client is not None:
             await ontorag_client.aclose()
         await store.close()
-
-
-def _cli_llm(settings):  # type: ignore[no-untyped-def]
-    """Build an LLM client from settings, or None if no provider is configured."""
-
-    if not settings.llm_provider:
-        return None
-    from ontorag_flow.engines.llm_providers import make_llm_client
-
-    return make_llm_client(settings.llm_provider, settings.llm_model)
-
-
-async def _cli_ontorag(settings):  # type: ignore[no-untyped-def]
-    """Connect an ontorag client if CONNECT_ONTORAG is set; None otherwise."""
-
-    if not settings.connect_ontorag:
-        return None
-    from ontorag_flow.ontorag_client import OntoragClient, OntoragClientError
-
-    client = OntoragClient(settings.ontorag_mcp_url)
-    try:
-        await client.connect()
-    except OntoragClientError as exc:
-        console.print(f"[yellow]ontorag unreachable; Bayesian engine disabled:[/] {exc}")
-        return None
-    return client
 
 
 def _parse_params(pairs: list[str]) -> dict[str, Any]:
