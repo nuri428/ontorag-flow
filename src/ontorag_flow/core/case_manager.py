@@ -351,6 +351,32 @@ class CaseManager:
             informed_by=case.last_activity_uri,
         )
 
+        # Skeleton deviation tag: when the process declares a happy-path
+        # skeleton, compare *this* action against the next expected entry.
+        # Counts only non-compensation history events so a saga rollback
+        # doesn't pretend we advanced past where we did. ExecutionOutcome
+        # is a plain mutable container, so we replace its activity in-place
+        # and re-record (audit_store.record is upsert in both backends).
+        if process.skeleton:
+            position = sum(
+                1 for event in case.history if event.action_uri != COMPENSATION_ACTION_URI
+            )
+            on_path = position < len(process.skeleton)
+            expected = process.skeleton[position] if on_path else None
+            deviated = (not on_path) or (expected != action_uri)
+            if deviated:
+                outcome.activity = outcome.activity.model_copy(
+                    update={
+                        "metadata": {
+                            **outcome.activity.metadata,
+                            "deviated_from_skeleton": True,
+                            "skeleton_expected": expected,
+                            "skeleton_position": position,
+                        },
+                    },
+                )
+                await self._executor.audit_store.record(outcome.activity)
+
         new_case = case.record_execution(outcome.activity, outcome.state)
         if new_case.state.goal_reached():
             new_case = new_case.with_status(CaseStatus.CLOSED)

@@ -73,6 +73,18 @@ class ProcessDefinition(BaseModel):
             "have their backing clients configured for the chosen kinds."
         ),
     )
+    skeleton: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional happy-path sequence of action URIs. Advisory by default: "
+            "the engine still proposes freely and the operator still chooses, "
+            "but executions that don't match the next expected entry are flagged "
+            "in the PROV-O activity ('deviated_from_skeleton: true', "
+            "'skeleton_expected: <uri>'). To make the skeleton strict, mirror it "
+            "with constraints.immediately_after edges. Empty list = no skeleton "
+            "(pure ACM)."
+        ),
+    )
     constraints: dict[str, Any] = Field(
         default_factory=dict,
         description=(

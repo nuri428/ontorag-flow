@@ -69,6 +69,8 @@ def _build_process_svg(process: Any) -> str:
 
     actions = list(process.allowed_actions or [])
     constraints = process.constraints or {}
+    skeleton = list(process.skeleton or [])
+    skeleton_position: dict[str, int] = {uri: idx for idx, uri in enumerate(skeleton)}
     timer_events = process.timer_events or []
     at_most_once = set(constraints.get("at_most_once") or [])
     requires = constraints.get("requires") or {}
@@ -157,12 +159,25 @@ def _build_process_svg(process: Any) -> str:
             if action_uri in at_most_once
             else ""
         )
+        # Skeleton position badge — small circled number top-left if this
+        # action is on the happy path. Visual cue that the YAML expects it
+        # at step N, without changing the runtime behavior.
+        skeleton_badge = ""
+        if action_uri in skeleton_position:
+            n = skeleton_position[action_uri] + 1
+            skeleton_badge = (
+                f'<circle cx="{x + 12}" cy="{y + 12}" r="10" '
+                f'fill="#dafbe1" stroke="#4ac26b" stroke-width="1.2"/>'
+                f'<text x="{x + 12}" y="{y + 16}" text-anchor="middle" '
+                f'font-size="11" fill="#0a3622" font-weight="600">{n}</text>'
+            )
         parts.append(
             f"<g><title>{full}</title>"
             f'<rect x="{x}" y="{y}" rx="8" ry="8" width="{node_w}" height="{node_h}" '
             f'fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>'
             f'<text x="{x + node_w // 2}" y="{y + node_h // 2 + 4}" '
             f'text-anchor="middle" font-size="13" fill="#1f2328">{label}</text>'
+            f"{skeleton_badge}"
             f"{once_badge}"
             f"</g>"
         )

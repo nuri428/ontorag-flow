@@ -82,6 +82,7 @@ def test_full_round_trip_preserves_every_field(tmp_path: Path) -> None:
             {"after_minutes": 0, "action": "urn:a:1", "params": {"k": "v"}},
         ],
         arbitration={"proposer": "rule", "validator": "causal"},
+        skeleton=["urn:a:1", "urn:a:2"],
     )
 
     path = tmp_path / "full.ttl"
@@ -97,6 +98,8 @@ def test_full_round_trip_preserves_every_field(tmp_path: Path) -> None:
     assert loaded.goal == process.goal
     assert loaded.initial_state == process.initial_state
     assert loaded.arbitration == process.arbitration
+    # Skeleton preserves order — first action stays first after a Turtle round-trip.
+    assert loaded.skeleton == ["urn:a:1", "urn:a:2"]
 
 
 def test_json_ld_round_trip(tmp_path: Path) -> None:

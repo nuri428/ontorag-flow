@@ -28,6 +28,10 @@
       <td>
         {% if activity.success %}<span class="badge closed">ok</span>
         {% else %}<span class="badge failed">fail</span>{% endif %}
+        {% if activity.metadata.get('deviated_from_skeleton') %}
+          {% set expected = activity.metadata.get('skeleton_expected') %}
+          <br><span class="badge failed" title="{{ 'expected: ' ~ expected if expected else 'past end of skeleton' }}">off-skeleton</span>
+        {% endif %}
       </td>
       <td>
         <a href="/ui/cases/{{ case_uri }}/counterfactual?swap={{ activity.activity_uri }}">Counterfactual</a>

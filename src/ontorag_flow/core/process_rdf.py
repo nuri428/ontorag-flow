@@ -107,6 +107,18 @@ def process_to_rdf(process: ProcessDefinition, *, format: str = "turtle") -> str
                 Literal(json.dumps(process.arbitration, sort_keys=True)),
             )
         )
+    if process.skeleton:
+        # Ordered sequence — store as a single JSON literal so the order
+        # survives. RDF lists are valid but rdflib's Collection helpers
+        # complicate round-trips; JSON keeps it symmetric with other
+        # list-shaped fields (timer_events, rules).
+        graph.add(
+            (
+                subject,
+                OF.skeletonJson,
+                Literal(json.dumps(process.skeleton)),
+            )
+        )
 
     return graph.serialize(format=format)
 
@@ -178,6 +190,7 @@ def load_process_rdf(path: str | Path, *, format: str | None = None) -> ProcessD
             constraints=_json_literal(graph, subject, OF.constraintsJson) or {},
             timer_events=_json_literal(graph, subject, OF.timerEventsJson) or [],
             arbitration=_json_literal(graph, subject, OF.arbitrationJson),
+            skeleton=_json_literal(graph, subject, OF.skeletonJson) or [],
         )
     except ValidationError as exc:
         raise ProcessParseError(

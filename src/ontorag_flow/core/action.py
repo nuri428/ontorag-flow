@@ -113,6 +113,16 @@ class ProvOActivity(BaseModel):
     )
     success: bool = True
     error: str | None = None
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Free-form audit metadata produced by orchestration (not by the "
+            "action itself). The case manager uses it for skeleton-deviation "
+            "tags ('deviated_from_skeleton', 'skeleton_expected', "
+            "'skeleton_position') and any future audit annotations whose "
+            "schema doesn't deserve a top-level field."
+        ),
+    )
 
     def to_jsonld(self) -> dict[str, Any]:
         """Render this activity as a PROV-O JSON-LD node.
