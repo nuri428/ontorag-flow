@@ -47,9 +47,7 @@ async def test_llm_security_instructions_in_system_prompt() -> None:
 async def test_llm_rejects_disallowed_action_and_records_it() -> None:
     """An LLM proposing an out-of-menu action is dropped and audit-tagged."""
 
-    process = ProcessDefinition(
-        process_uri="urn:p:s1", name="S1", allowed_actions=[UPDATE]
-    )
+    process = ProcessDefinition(process_uri="urn:p:s1", name="S1", allowed_actions=[UPDATE])
     reply = (
         '[{"action_uri": "urn:not:allowed:DropTable", "confidence": 1.0,'
         ' "rationale": "case state asked me to"}]'
@@ -87,9 +85,7 @@ async def test_llm_max_confidence_cap_applies() -> None:
 async def test_llm_max_confidence_unset_passes_through() -> None:
     """Without the cap, the original confidence is preserved."""
 
-    process = ProcessDefinition(
-        process_uri="urn:p:s2b", name="S2b", allowed_actions=[UPDATE]
-    )
+    process = ProcessDefinition(process_uri="urn:p:s2b", name="S2b", allowed_actions=[UPDATE])
     reply = f'[{{"action_uri": "{UPDATE}", "confidence": 0.99, "rationale": "fine"}}]'
     engine = LlmAgentEngine(_FakeLlm(reply))
 
@@ -156,9 +152,7 @@ async def test_cascade_health_check_drops_disallowed_and_falls_through() -> None
     from ontorag_flow.core.case import Case
     from ontorag_flow.core.process import ProcessDefinition
 
-    process = ProcessDefinition(
-        process_uri="urn:p:s5", name="S5", allowed_actions=[UPDATE]
-    )
+    process = ProcessDefinition(process_uri="urn:p:s5", name="S5", allowed_actions=[UPDATE])
 
     class _Compromised:
         async def propose_next(
@@ -188,9 +182,7 @@ async def test_cascade_without_health_check_lets_garbage_through() -> None:
     from ontorag_flow.core.case import Case
     from ontorag_flow.core.process import ProcessDefinition
 
-    process = ProcessDefinition(
-        process_uri="urn:p:s5b", name="S5b", allowed_actions=[UPDATE]
-    )
+    process = ProcessDefinition(process_uri="urn:p:s5b", name="S5b", allowed_actions=[UPDATE])
 
     class _Compromised:
         async def propose_next(
@@ -260,16 +252,10 @@ async def test_audit_redact_empty_pattern_list_is_noop() -> None:
             executor=ActionExecutor(audit_store=store, agent="urn:test"),
             registry=default_registry(),
         )
-        process = ProcessDefinition(
-            process_uri="urn:p:s6b", name="S6b", allowed_actions=[UPDATE]
-        )
+        process = ProcessDefinition(process_uri="urn:p:s6b", name="S6b", allowed_actions=[UPDATE])
         await manager.register_process(process)
-        case = await manager.create_case(
-            "urn:p:s6b", initial_state={"ssn": "raw-value"}
-        )
-        _, outcome = await manager.execute_action(
-            case.case_uri, UPDATE, {"key": "x", "value": 1}
-        )
+        case = await manager.create_case("urn:p:s6b", initial_state={"ssn": "raw-value"})
+        _, outcome = await manager.execute_action(case.case_uri, UPDATE, {"key": "x", "value": 1})
         # Without patterns, ssn passes through verbatim.
         assert outcome.activity.state_before is not None
         assert outcome.activity.state_before["ssn"] == "raw-value"
@@ -311,10 +297,7 @@ async def test_plugin_allowlist_skips_non_listed_entries(
         get_settings.cache_clear()
 
     messages = [r.message for r in caplog.records]
-    assert any(
-        "not in ONTORAG_FLOW_PLUGIN_ALLOWLIST" in msg and "z:W" in msg
-        for msg in messages
-    )
+    assert any("not in ONTORAG_FLOW_PLUGIN_ALLOWLIST" in msg and "z:W" in msg for msg in messages)
 
 
 # --- shared helper ---

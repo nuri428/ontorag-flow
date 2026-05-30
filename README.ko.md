@@ -367,6 +367,11 @@ human)만 동작합니다.
 - [`docs/operations.md`](docs/operations.md) — SQLite / Postgres 배포의
   **백업 / 복원 / 재해 복구** (EN + KO), 운영자가 시스템을 다시 열기 전
   실행할 사후 복원 smoke flow 포함.
+- [`docs/security.md`](docs/security.md) — **위협 모델 + 7가지 hardening
+  표면** (anti-injection, confidence cap, execute policy, transport
+  trust, cascade health, audit redact, plugin allowlist), 그리고
+  *의도적으로 방어하지 않는* 것들 (auth, RBAC — reverse-proxy 책임).
+  EN + KO.
 - [`CLAUDE.md`](CLAUDE.md) — 프로젝트 사양, 아키텍처 근거, milestone 계획,
   anti-pattern, **v1.x를 위한 알려진 위험** (history bloat, write-ahead
   audit), 그리고 어떤 *Open question*들이 **DECIDED** vs **PARTIAL**인지의

@@ -439,6 +439,22 @@ Mirror ontorag's conventions exactly:
 - **Training-free** (through v0.9). Same posture as ontorag — no ML model training infrastructure. v1.0+ may revisit.
 - **Explicit side effects.** Every action declares its side effects upfront in its schema. No hidden state mutation.
 - **Saga over 2PC.** Cross-system consistency via compensating actions, not distributed transactions.
+- **Defense in depth — assume case state is hostile.** ACM/LLM
+  architectures pay a permanent prompt-injection cost; ontorag-flow
+  ships seven hardening surfaces *by default*, each behind a YAML
+  field or env var so opt-in is free:
+  S1 anti-injection system prompt + rejected-proposals audit;
+  S2 `process.max_llm_confidence` cap;
+  S3 `process.execute_policy` + `Action.auto_execute_disabled`
+  (ABox write-back / human handoff actions can never be auto-run);
+  S4 `ONTORAG_MCP_HTTPS_ONLY` + `ONTORAG_EXPECTED_VERSION` for the
+  cross-repo trust boundary;
+  S5 `CascadeEngine.health_check` (compromised proposer falls through);
+  S6 `process.audit_redact` (fnmatch globs mask values before
+  persistence + UI display);
+  S7 `ONTORAG_FLOW_PLUGIN_ALLOWLIST` (entry-point name allowlist).
+  See `docs/security.md` for the threat model + what's *intentionally*
+  not defended (auth, RBAC, multi-tenant — all anti-patterns).
 
 ## Milestone plan
 

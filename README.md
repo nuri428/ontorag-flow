@@ -370,6 +370,11 @@ docstrings; this section is the index.
   disaster recovery** for SQLite and Postgres deployments (EN + KO),
   plus the post-restore smoke flow operators should run before
   reopening the system.
+- [`docs/security.md`](docs/security.md) — **threat model + seven
+  hardening surfaces** (anti-injection, confidence cap, execute
+  policy, transport trust, cascade health, audit redact, plugin
+  allowlist), and what is *intentionally* not defended (auth, RBAC —
+  reverse-proxy responsibility). EN + KO.
 - [`CLAUDE.md`](CLAUDE.md) — project specification, architecture
   rationale, milestone plan, anti-patterns, **Known risks for v1.x**
   (history bloat, write-ahead audit), and the running record of which

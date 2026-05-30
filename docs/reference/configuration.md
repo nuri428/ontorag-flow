@@ -17,6 +17,9 @@ root). Defaults are safe for local development.
 | `API_HOST` | `127.0.0.1` | `ontorag-flow serve` bind host |
 | `API_PORT` | `8100` | `ontorag-flow serve` bind port |
 | `LOG_LEVEL` | `INFO` | Standard Python logging level |
+| `ONTORAG_MCP_HTTPS_ONLY` | `false` | Refuse to connect when the ontorag URL is not `https://`. Defense against env-var hijack. See [Security S4](../security.md#s4-transport-trust). |
+| `ONTORAG_EXPECTED_VERSION` | unset | Pinned ontorag version; WARN-log on drift after connect. Detection, not enforcement. |
+| `ONTORAG_FLOW_PLUGIN_ALLOWLIST` | unset | Comma-separated entry-point names from `[project.entry-points."ontorag_flow.actions"]`; unlisted plugins are skipped. See [Security S7](../security.md#s7-ontorag_flow_plugin_allowlist). |
 
 ## Bootstrap
 
