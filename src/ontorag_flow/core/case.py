@@ -52,6 +52,12 @@ class Case(BaseModel):
     process_uri: str
     state: CaseState
     status: CaseStatus = CaseStatus.OPEN
+    # History is derived from the activities table (the audit log is the
+    # authority — premortem P5). The field stays on the in-memory model so
+    # callers (compensation, UI, demos, API responses) read it naturally;
+    # stores explicitly exclude it when persisting (see Case.PERSIST_EXCLUDE)
+    # so the case row no longer grows unboundedly with every event.
+    # CaseManager.get_case/find_cases hydrate this on load.
     history: tuple[CaseEvent, ...] = ()
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -95,3 +101,8 @@ class Case(BaseModel):
         """Return a copy with the status changed and ``updated_at`` refreshed."""
 
         return self.model_copy(update={"status": status, "updated_at": utcnow()})
+
+    def persistable_json(self) -> str:
+        """JSON the store should persist — history is excluded (audit is authority, P5)."""
+
+        return self.model_dump_json(exclude={"history"})

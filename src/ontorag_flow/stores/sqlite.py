@@ -107,7 +107,7 @@ class SqliteStore:
                 case.case_uri,
                 case.process_uri,
                 case.status.value,
-                case.model_dump_json(),
+                case.persistable_json(),
                 case.version,
             ),
         )
@@ -136,7 +136,7 @@ class SqliteStore:
             (
                 next_case.process_uri,
                 next_case.status.value,
-                next_case.model_dump_json(),
+                next_case.persistable_json(),
                 new_version,
                 case.case_uri,
                 expected_version,

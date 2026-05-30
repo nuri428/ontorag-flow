@@ -129,7 +129,10 @@ class CaseManager:
     # --- case reads -------------------------------------------------------
 
     async def get_case(self, case_uri: str) -> Case | None:
-        return await self._cases.get_case(case_uri)
+        case = await self._cases.get_case(case_uri)
+        if case is None:
+            return None
+        return await self._hydrate_history(case)
 
     async def find_cases(
         self,
@@ -137,7 +140,15 @@ class CaseManager:
         status: CaseStatus | None = None,
         process_uri: str | None = None,
     ) -> list[Case]:
-        return await self._cases.find_cases(status=status, process_uri=process_uri)
+        cases = await self._cases.find_cases(status=status, process_uri=process_uri)
+        return [await self._hydrate_history(case) for case in cases]
+
+    async def _hydrate_history(self, case: Case) -> Case:
+        """Rebuild ``case.history`` from the authoritative audit log (P5)."""
+
+        activities = await self._executor.audit_store.list_by_case(case.case_uri)
+        events = tuple(_activity_to_event(activity) for activity in activities)
+        return case.model_copy(update={"history": events})
 
     # --- decisions --------------------------------------------------------
 
@@ -154,7 +165,7 @@ class CaseManager:
         if self._engine_factory is None:
             raise NoEngineConfiguredError("No decision engine configured for this case manager.")
 
-        case = await self._cases.get_case(case_uri)
+        case = await self.get_case(case_uri)
         if case is None:
             raise CaseNotFoundError(case_uri)
         process = await self._processes.get_process(case.process_uri)
@@ -189,7 +200,7 @@ class CaseManager:
         if self._engine_factory is None:
             raise NoEngineConfiguredError("No decision engine configured.")
 
-        case = await self._cases.get_case(case_uri)
+        case = await self.get_case(case_uri)
         if case is None:
             raise CaseNotFoundError(case_uri)
         process = await self._processes.get_process(case.process_uri)
@@ -269,7 +280,7 @@ class CaseManager:
             ActionNotAllowedError, ActionNotFoundError: As applicable.
         """
 
-        case = await self._cases.get_case(case_uri)
+        case = await self.get_case(case_uri)  # hydrated history is needed by constraint checks
         if case is None:
             raise CaseNotFoundError(case_uri)
         if case.status is not CaseStatus.OPEN:
@@ -334,7 +345,7 @@ class CaseManager:
                 a prior compensation lies between target and end (unsupported).
         """
 
-        case = await self._cases.get_case(case_uri)
+        case = await self.get_case(case_uri)
         if case is None:
             raise CaseNotFoundError(case_uri)
         if not case.history:
@@ -393,23 +404,28 @@ class CaseManager:
         )
         await audit_store.record(compensation)
 
-        new_event = CaseEvent(
-            activity_uri=compensation.activity_uri,
-            action_uri=COMPENSATION_ACTION_URI,
-            at=ended,
-            success=True,
-        )
-        new_case = case.model_copy(
+        # P5: history is derived from the audit log on the next load, so we
+        # only need to persist the state/status change here. Reload the case
+        # so the returned object has the freshly-hydrated history (including
+        # the compensation event we just recorded).
+        intermediate = case.model_copy(
             update={
                 "state": new_state,
-                "history": kept + (new_event,),
                 "status": CaseStatus.OPEN,
                 "updated_at": utcnow(),
             }
         )
-        await self._cases.update_case(new_case)
+        await self._cases.update_case(intermediate)
         logger.info("Compensated %d activities on case %s.", len(undone), case_uri)
-        return new_case
+        refreshed = await self.get_case(case_uri)
+        if refreshed is None:
+            # We just updated this row; if it's gone something raced us
+            # (concurrent delete or store inconsistency) — surface it loudly
+            # rather than silently returning a stale in-memory snapshot.
+            raise CompensationError(
+                f"Case {case_uri} disappeared between compensate update and refresh."
+            )
+        return refreshed
 
     def _find_undo_start(self, case: Case, target_activity_uri: str | None) -> int:
         if target_activity_uri is None:
@@ -475,10 +491,26 @@ class CaseManager:
         return new_case
 
     async def _require_case(self, case_uri: str) -> Case:
-        case = await self._cases.get_case(case_uri)
+        case = await self.get_case(case_uri)
         if case is None:
             raise CaseNotFoundError(case_uri)
         return case
+
+
+def _activity_to_event(activity: ProvOActivity) -> CaseEvent:
+    """Project an audit activity onto the case-history view.
+
+    The audit log is the authority for what happened in a case (P5); this
+    helper renders one activity record as the lightweight ``CaseEvent`` that
+    in-memory consumers (compensation, UI, demos) prefer to read.
+    """
+
+    return CaseEvent(
+        activity_uri=activity.activity_uri,
+        action_uri=activity.action_uri,
+        at=activity.ended_at or activity.started_at or utcnow(),
+        success=activity.success,
+    )
 
 
 def _activity_to_result(activity: ProvOActivity) -> ActionResult:

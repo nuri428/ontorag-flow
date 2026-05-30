@@ -40,6 +40,39 @@ async def test_case_roundtrip_and_find(sqlite_store: SqliteStore) -> None:
     assert len(await sqlite_store.find_cases(process_uri="urn:p:other")) == 0
 
 
+async def test_persisted_case_excludes_history(sqlite_store: SqliteStore) -> None:
+    # P5: the audit log is the authoritative history. The cases.data row must
+    # not grow with every event — only the cross-cutting fields are stored,
+    # and CaseManager rehydrates history from the activities table on load.
+    import json
+
+    from ontorag_flow.core.case import CaseEvent
+
+    case = Case(
+        case_uri="urn:c:history-exclude",
+        process_uri="urn:p",
+        state=CaseState(case_uri="urn:c:history-exclude"),
+        history=(
+            CaseEvent(
+                activity_uri="urn:a:1",
+                action_uri="urn:act:1",
+                at=__import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").UTC),
+                success=True,
+            ),
+        ),
+    )
+    await sqlite_store.create_case(case)
+
+    async with sqlite_store._conn.execute(  # type: ignore[union-attr]
+        "SELECT data FROM cases WHERE uri = ?", ("urn:c:history-exclude",)
+    ) as cursor:
+        row = await cursor.fetchone()
+    payload = json.loads(row["data"])
+    assert "history" not in payload, (
+        "case.data must not carry history — audit log is the authority (P5)."
+    )
+
+
 async def test_optimistic_lock_blocks_stale_update(sqlite_store: SqliteStore) -> None:
     case = Case(case_uri="urn:c:lock", process_uri="urn:p", state=CaseState(case_uri="urn:c:lock"))
     await sqlite_store.create_case(case)

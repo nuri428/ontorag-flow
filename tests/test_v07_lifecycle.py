@@ -48,9 +48,11 @@ async def test_compensate_restores_state_and_reopens(
 
     assert compensated.status is CaseStatus.OPEN  # reopened
     assert compensated.state.properties == {}  # back to creation state
-    # history is replaced by a single compensation event:
-    assert len(compensated.history) == 1
-    assert compensated.history[0].action_uri.endswith(":_Compensate")
+    # P5: history derives from the audit log, which keeps every activity that
+    # was attempted plus the compensation event that undid them. So we expect
+    # the 3 original actions + 1 compensation marker.
+    assert len(compensated.history) == 4
+    assert compensated.history[-1].action_uri.endswith(":_Compensate")
 
 
 async def test_compensate_partial_to_target(
@@ -66,11 +68,12 @@ async def test_compensate_partial_to_target(
     compensated = await manager.compensate(
         case.case_uri, target_activity_uri=second.activity.activity_uri
     )
-    # Only the second action is undone; first action's effect remains.
+    # Only the second action is undone (state reverts); audit retains both
+    # originals plus the compensation marker (P5: audit is authority).
     assert compensated.state.properties == {"a": 1}
-    # kept history (first) + compensation event = 2
-    assert len(compensated.history) == 2
+    assert len(compensated.history) == 3  # first + second + compensation
     assert compensated.history[0].activity_uri == first.activity.activity_uri
+    assert compensated.history[-1].action_uri.endswith(":_Compensate")
 
 
 async def test_compensate_unknown_target_raises(
