@@ -37,6 +37,7 @@ llm = [
 # Production persistence backend.
 postgres = [
     "asyncpg>=0.29",
+    "testcontainers[postgres]>=4.0",
 ]
 dev = [
     "pytest>=8.2",
