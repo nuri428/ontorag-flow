@@ -327,6 +327,153 @@ def process_simulate(
     asyncio.run(_run())
 
 
+@process_app.command("test")
+def process_test(
+    path: Path = typer.Argument(
+        ..., help="Path to a process YAML with an 'expectations:' section."
+    ),
+) -> None:
+    """Run the YAML's ``expectations:`` list as engine regression tests.
+
+    Each expectation declares an initial case state and one of:
+      - ``proposes: <action_uri>`` — top proposal's action_uri must match
+      - ``proposes_none: true``    — engine must return zero proposals
+      - ``after_execute_top.state.<key>: <value>`` — apply top proposal,
+        assert resulting case state has these key/value pairs
+
+    Example::
+
+        expectations:
+          - name: unknown level fires assessor
+            given_state: { triage_level: unknown }
+            proposes: urn:ontorag-flow:action:UpdateCaseProperty
+          - name: high severity sets urgent
+            given_state: { severity: 8 }
+            after_execute_top:
+              state: { triage_level: urgent }
+
+    Exits 0 if all expectations pass, 1 otherwise.
+    """
+
+    import yaml
+
+    if not path.exists():
+        console.print(f"[red]Not found:[/] {path}")
+        raise typer.Exit(code=1)
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        console.print(f"[red]Process file {path} must be a YAML mapping.[/]")
+        raise typer.Exit(code=1)
+
+    expectations = raw.pop("expectations", None)
+    if not expectations:
+        console.print("[yellow]No 'expectations:' section in the YAML — nothing to test.[/]")
+        raise typer.Exit(code=1)
+
+    try:
+        from ontorag_flow.core.process import ProcessDefinition
+
+        process = ProcessDefinition.model_validate(raw)
+    except Exception as exc:  # noqa: BLE001 — surface the validation error
+        console.print(f"[red]Invalid process definition:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    failures = asyncio.run(_run_process_tests(process, expectations))
+    if failures:
+        console.print(f"[red]✗ {len(failures)} expectation(s) failed.[/]")
+        for failure in failures:
+            console.print(f"  - {failure}")
+        raise typer.Exit(code=1)
+    console.print(f"[green]✓ All {len(expectations)} expectation(s) passed.[/]")
+
+
+async def _run_process_tests(process: Any, expectations: list[Any]) -> list[str]:
+    """Drive each expectation against an in-memory case; return failure messages."""
+
+    from ontorag_flow.stores.sqlite import SqliteStore as _Store
+
+    failures: list[str] = []
+
+    async with _Store(":memory:") as store:
+        settings = get_settings()
+        registry = default_registry()
+        ontorag_client = await maybe_connect_ontorag(
+            settings, on_error=lambda message: console.print(f"[yellow]{message}[/]")
+        )
+        try:
+            resolver = EngineResolver(
+                registry=registry,
+                ontorag_client=ontorag_client,
+                llm_client=build_llm_client(settings),
+            )
+            executor = ActionExecutor(audit_store=store, agent="urn:ontorag-flow:process-test")
+            manager = CaseManager(
+                case_store=store,
+                process_store=store,
+                executor=executor,
+                registry=registry,
+                engine_factory=resolver.for_process,
+            )
+            await manager.register_process(process)
+
+            for index, raw_expectation in enumerate(expectations):
+                if not isinstance(raw_expectation, dict):
+                    failures.append(f"#{index + 1}: expectation must be a mapping")
+                    continue
+                name = raw_expectation.get("name") or f"expectation #{index + 1}"
+                given = raw_expectation.get("given_state") or {}
+                if not isinstance(given, dict):
+                    failures.append(f"{name}: given_state must be a mapping")
+                    continue
+
+                case = await manager.create_case(process.process_uri, initial_state=given)
+                proposals = await manager.propose_next(case.case_uri)
+
+                proposes = raw_expectation.get("proposes")
+                if proposes is not None:
+                    if not proposals or proposals[0].action_uri != proposes:
+                        actual = proposals[0].action_uri if proposals else "(none)"
+                        failures.append(
+                            f"{name}: expected top proposal {proposes!r}, got {actual!r}"
+                        )
+
+                if raw_expectation.get("proposes_none"):
+                    if proposals:
+                        failures.append(
+                            f"{name}: expected no proposals, got {[p.action_uri for p in proposals]}"
+                        )
+
+                after_execute = raw_expectation.get("after_execute_top")
+                if after_execute:
+                    if not proposals:
+                        failures.append(
+                            f"{name}: after_execute_top declared but engine returned no proposals"
+                        )
+                        continue
+                    top = proposals[0]
+                    updated, _ = await manager.execute_action(
+                        case.case_uri, top.action_uri, top.params
+                    )
+                    expected_state = (
+                        (after_execute.get("state") or {})
+                        if isinstance(after_execute, dict)
+                        else {}
+                    )
+                    actual_state = updated.state.properties
+                    for key, value in expected_state.items():
+                        if actual_state.get(key) != value:
+                            failures.append(
+                                f"{name}: after_execute_top.state[{key!r}] expected {value!r}, "
+                                f"got {actual_state.get(key)!r}"
+                            )
+        finally:
+            if ontorag_client is not None:
+                await ontorag_client.aclose()
+
+    return failures
+
+
 @process_app.command("list")
 def process_list() -> None:
     """List persisted process definitions."""
