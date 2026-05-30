@@ -54,6 +54,37 @@ uv run ontorag-flow case propose-next <case_uri>
 
 ---
 
+## 스크린샷
+
+라이브 ontorag MCP 서버(`localhost:8011`) 에 연결한 상태로, 두 참조
+프로세스가 로드되고 케이스 하나가 실행 중인 상황을 캡쳐.
+
+### 대시보드 — 모든 케이스, 상태 필터, "Tick all timers"
+
+![Dashboard](docs/images/01-dashboard.png)
+
+### 케이스 detail — lifecycle 버튼, state, proposals ("why?" 링크), subcases, history
+
+![Case detail](docs/images/05-case-detail.png)
+
+### Decision engine inspector — fired/unmatched 규칙, confidence bar, raw trace fold
+
+![Engine inspector](docs/images/06-engine-inspector.png)
+
+### 프로세스 다이어그램 — CMMN 스타일 inline SVG: actions, `requires` / `mutex` / `immediately_after` edges, ⏱ timer events
+
+![Process diagram](docs/images/04-process-diagram.png)
+
+### 프로세스 inspector — 프로세스별 상태 분포 + 모든 케이스 가로질러 가장 자주 발화한 actions
+
+![Process detail](docs/images/03-process-detail.png) ![Processes list](docs/images/02-processes.png)
+
+### 감사 추적 — 행별 `Counterfactual` 링크가 있는 PROV-O activities
+
+![Audit trail](docs/images/07-audit-trail.png)
+
+---
+
 ## 무엇을 얻는가
 
 | 기능 | 위치 |

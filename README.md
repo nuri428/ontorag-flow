@@ -53,6 +53,37 @@ auto-close on goal satisfaction, and exports a PROV-O Turtle audit trail.
 
 ---
 
+## Screenshots
+
+Captured against a live ontorag MCP server (`localhost:8011`) with the
+two reference processes loaded and one case mid-execution.
+
+### Dashboard — every case, status filter, "Tick all timers"
+
+![Dashboard](docs/images/01-dashboard.png)
+
+### Case detail — lifecycle buttons, state, proposals (with "why?" link), subcases, history
+
+![Case detail](docs/images/05-case-detail.png)
+
+### Decision engine inspector — rules fired vs unmatched, confidence bars, raw trace fold
+
+![Engine inspector](docs/images/06-engine-inspector.png)
+
+### Process diagram — CMMN-style inline SVG: actions, `requires` / `mutex` / `immediately_after` edges, ⏱ timer events
+
+![Process diagram](docs/images/04-process-diagram.png)
+
+### Process inspector — per-process status mix + hottest actions across all cases
+
+![Process detail](docs/images/03-process-detail.png) ![Processes list](docs/images/02-processes.png)
+
+### Audit trail — PROV-O activities with `Counterfactual` link per row
+
+![Audit trail](docs/images/07-audit-trail.png)
+
+---
+
 ## What you get
 
 | Capability | Where |
