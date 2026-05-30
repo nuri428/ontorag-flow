@@ -21,6 +21,7 @@ from ontorag_flow.core.case import CaseStatus
 from ontorag_flow.core.case_manager import (
     CaseManager,
     CaseManagerError,
+    CounterfactualError,
     NoEngineConfiguredError,
 )
 from ontorag_flow.core.registry import ActionRegistry
@@ -45,6 +46,8 @@ def _ctx(**extra: Any) -> dict[str, Any]:
 async def dashboard(
     request: Request,
     status: str | None = None,
+    ticked: str | None = None,
+    error: str | None = None,
     manager: CaseManager = Depends(get_case_manager),
 ) -> HTMLResponse:
     """Open cases plus a status filter."""
@@ -57,7 +60,28 @@ async def dashboard(
             raise HTTPException(status_code=400, detail=f"Unknown status: {status}") from exc
 
     cases = await manager.find_cases(status=case_status)
-    return templates.TemplateResponse(request, "dashboard.html", _ctx(cases=cases, status=status))
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        _ctx(cases=cases, status=status, ticked=ticked, error=error),
+    )
+
+
+@router.post("/tick", include_in_schema=False)
+async def ui_tick(
+    manager: CaseManager = Depends(get_case_manager),
+) -> RedirectResponse:
+    """Fire elapsed timer events across all open cases, then redirect home."""
+
+    from urllib.parse import quote
+
+    try:
+        fired = await manager.tick()
+    except CaseManagerError as exc:
+        return RedirectResponse(
+            f"/ui/?error={quote(f'{type(exc).__name__}: {exc}')}", status_code=303
+        )
+    return RedirectResponse(f"/ui/?ticked={len(fired)}", status_code=303)
 
 
 @router.get("/actions", response_class=HTMLResponse, include_in_schema=False)
@@ -218,4 +242,95 @@ async def case_audit(
     activities = await store.list_by_case(case_uri)
     return templates.TemplateResponse(
         request, "audit.html", _ctx(case_uri=case_uri, activities=activities)
+    )
+
+
+# --- counterfactual (Pearl Rung 3) ---------------------------------------
+
+
+@router.get(
+    "/cases/{case_uri}/counterfactual",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def counterfactual_form(
+    request: Request,
+    case_uri: str,
+    swap: str,
+    registry: ActionRegistry = Depends(get_registry),
+    manager: CaseManager = Depends(get_case_manager),
+    store=Depends(get_store),
+) -> HTMLResponse:
+    """Show a form pre-populated with the swap activity, asking what to put in its place."""
+
+    case = await manager.get_case(case_uri)
+    if case is None:
+        raise HTTPException(status_code=404, detail=f"No such case: {case_uri}")
+    swap_activity = await store.get(swap)
+    if swap_activity is None:
+        raise HTTPException(status_code=404, detail=f"No such activity: {swap}")
+    actions = sorted(action.uri for action in registry.all())
+    return templates.TemplateResponse(
+        request,
+        "counterfactual.html",
+        _ctx(case=case, swap_activity=swap_activity, actions=actions, result=None, error=None),
+    )
+
+
+@router.post(
+    "/cases/{case_uri}/counterfactual",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def counterfactual_submit(
+    request: Request,
+    case_uri: str,
+    swap_activity_uri: str = Form(...),
+    action_uri: str = Form(...),
+    params_json: str = Form(default="{}"),
+    registry: ActionRegistry = Depends(get_registry),
+    manager: CaseManager = Depends(get_case_manager),
+    store=Depends(get_store),
+) -> HTMLResponse:
+    """Replay the case with the swapped action and render the result inline."""
+
+    import json
+
+    case = await manager.get_case(case_uri)
+    if case is None:
+        raise HTTPException(status_code=404, detail=f"No such case: {case_uri}")
+    swap_activity = await store.get(swap_activity_uri)
+    actions = sorted(action.uri for action in registry.all())
+
+    error: str | None = None
+    result = None
+    try:
+        params = json.loads(params_json) if params_json.strip() else {}
+        if not isinstance(params, dict):
+            raise ValueError("params must be a JSON object")
+        result = await manager.counterfactual(
+            case_uri,
+            swap_activity_uri=swap_activity_uri,
+            action_uri=action_uri,
+            params=params,
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        error = f"Invalid params JSON: {exc}"
+    except (NoEngineConfiguredError, EngineUnavailableError) as exc:
+        error = f"Engine unavailable: {exc}"
+    except CounterfactualError as exc:
+        error = f"CounterfactualError: {exc}"
+    except CaseManagerError as exc:
+        error = f"{type(exc).__name__}: {exc}"
+
+    return templates.TemplateResponse(
+        request,
+        "counterfactual.html",
+        _ctx(
+            case=case,
+            swap_activity=swap_activity,
+            actions=actions,
+            result=result,
+            error=error,
+        ),
     )

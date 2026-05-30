@@ -197,3 +197,207 @@ def test_case_detail_renders_action_buttons_per_status(client: TestClient) -> No
     assert "/resume" in suspended_body
     # No suspend button while suspended.
     assert ">Suspend</button>" not in suspended_body
+
+
+# --- Dashboard global tick action -----------------------------------------
+
+
+def test_dashboard_tick_renders_button_and_count(client: TestClient) -> None:
+    # Process with a timer that fires immediately.
+    proc = {
+        **PROCESS,
+        "process_uri": "urn:p:ui-timer",
+        "timer_events": [
+            {"after_minutes": 0, "action": UPDATE, "params": {"key": "fired", "value": True}}
+        ],
+    }
+    client.post("/processes", json=proc)
+    client.post("/cases", json={"process_uri": "urn:p:ui-timer"})
+
+    # The Tick button is on the dashboard.
+    body = client.get("/ui/").text
+    assert 'action="/ui/tick"' in body
+    assert "Tick all timers" in body
+
+    resp = client.post("/ui/tick", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/ui/?ticked=1"
+
+    # The redirect target renders the "fired N timer events" callout.
+    after = client.get("/ui/?ticked=1").text
+    assert "Tick fired 1 timer event(s)" in after
+
+
+def test_dashboard_tick_with_no_timers_returns_zero(client: TestClient) -> None:
+    resp = client.post("/ui/tick", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/ui/?ticked=0"
+
+
+# --- Counterfactual UI (audit row → form → result/error callout) ---------
+
+
+def _executed_activity_uri(client: TestClient) -> tuple[str, str]:
+    """Set up a case + one execute, returning (case_uri, activity_uri)."""
+
+    import re
+
+    case_uri = _open_case(client)
+    client.post(
+        f"/cases/{case_uri}/execute",
+        json={"action_uri": UPDATE, "params": {"key": "x", "value": 1}},
+    )
+    audit_body = client.get(f"/ui/cases/{case_uri}/audit").text
+    match = re.search(r"urn:ontorag-flow:activity:[a-zA-Z0-9-]+", audit_body)
+    assert match, "no activity URI found in audit HTML"
+    return case_uri, match.group(0)
+
+
+def test_audit_row_shows_counterfactual_link(client: TestClient) -> None:
+    case_uri = _open_case(client)
+    client.post(
+        f"/cases/{case_uri}/execute",
+        json={"action_uri": UPDATE, "params": {"key": "x", "value": 1}},
+    )
+    body = client.get(f"/ui/cases/{case_uri}/audit").text
+    assert f"/ui/cases/{case_uri}/counterfactual?swap=" in body
+    assert ">Counterfactual</a>" in body
+
+
+def test_counterfactual_form_renders_with_actions(client: TestClient) -> None:
+    case_uri, activity_uri = _executed_activity_uri(client)
+    resp = client.get(f"/ui/cases/{case_uri}/counterfactual?swap={activity_uri}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Counterfactual replay" in body
+    assert activity_uri in body
+    # The action dropdown is populated from the registry.
+    assert UPDATE in body
+    assert 'name="action_uri"' in body
+
+
+def test_counterfactual_form_404_for_unknown_activity(client: TestClient) -> None:
+    case_uri = _open_case(client)
+    resp = client.get(f"/ui/cases/{case_uri}/counterfactual?swap=urn:no:such:activity")
+    assert resp.status_code == 404
+
+
+def test_counterfactual_submit_surfaces_engine_error_inline(client: TestClient) -> None:
+    # PROCESS uses RuleEngine — no counterfactual_replay → CounterfactualError
+    # surfaces on the same page as an error callout (no redirect, no 500).
+    case_uri, activity_uri = _executed_activity_uri(client)
+    resp = client.post(
+        f"/ui/cases/{case_uri}/counterfactual",
+        data={
+            "swap_activity_uri": activity_uri,
+            "action_uri": UPDATE,
+            "params_json": '{"key":"y","value":2}',
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert "CounterfactualError" in body or "Engine unavailable" in body
+    # No Result section rendered when the engine errored.
+    assert "<h2>Result</h2>" not in body
+
+
+def test_counterfactual_invalid_json_surfaces_validation_error(client: TestClient) -> None:
+    case_uri, activity_uri = _executed_activity_uri(client)
+    resp = client.post(
+        f"/ui/cases/{case_uri}/counterfactual",
+        data={
+            "swap_activity_uri": activity_uri,
+            "action_uri": UPDATE,
+            "params_json": "{not json",
+        },
+    )
+    assert resp.status_code == 200
+    assert "Invalid params JSON" in resp.text
+
+
+def test_counterfactual_non_dict_params_rejected(client: TestClient) -> None:
+    case_uri, activity_uri = _executed_activity_uri(client)
+    resp = client.post(
+        f"/ui/cases/{case_uri}/counterfactual",
+        data={
+            "swap_activity_uri": activity_uri,
+            "action_uri": UPDATE,
+            "params_json": "[1, 2, 3]",
+        },
+    )
+    assert resp.status_code == 200
+    assert "params must be a JSON object" in resp.text
+
+
+def test_counterfactual_submit_404_for_unknown_case(client: TestClient) -> None:
+    resp = client.post(
+        "/ui/cases/urn:no:such:case/counterfactual",
+        data={"swap_activity_uri": "urn:any", "action_uri": UPDATE, "params_json": "{}"},
+    )
+    assert resp.status_code == 404
+
+
+# --- mutating UI error paths (small extras for coverage) -----------------
+
+
+def test_ui_audit_404_for_unknown_case(client: TestClient) -> None:
+    assert client.get("/ui/cases/urn:nope/audit").status_code == 404
+
+
+def test_ui_subcase_bad_process_redirects_with_error(client: TestClient) -> None:
+    parent_uri = _open_case(client)
+    resp = client.post(
+        f"/ui/cases/{parent_uri}/subcase",
+        data={"process_uri": "urn:no:such:process"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    # The 303 lands back at the parent with an ?error= query.
+    assert resp.headers["location"].startswith(f"/ui/cases/{parent_uri}?error=")
+
+
+def test_ui_execute_top_on_closed_case_redirects_with_error(client: TestClient) -> None:
+    # PROCESS goal {diagnosed: true} closes the case after that key is set.
+    case_uri = _open_case(client)
+    client.post(
+        f"/cases/{case_uri}/execute",
+        json={"action_uri": UPDATE, "params": {"key": "diagnosed", "value": True}},
+    )
+    # Now closed — execute-top should fail gracefully (CaseClosedError surfaces).
+    resp = client.post(f"/ui/cases/{case_uri}/execute-top", follow_redirects=False)
+    assert resp.status_code == 303
+    # And the redirect target shows the error.
+    target = resp.headers["location"]
+    assert target.startswith(f"/ui/cases/{case_uri}")
+    assert "error=" in target
+
+
+@pytest.mark.parametrize("path", ["suspend", "resume", "compensate"])
+def test_ui_mutating_routes_on_unknown_case_redirect_with_error(
+    client: TestClient, path: str
+) -> None:
+    """Unknown case → CaseNotFoundError → 303 redirect back to a non-existent case detail."""
+
+    resp = client.post(f"/ui/cases/urn:no:such:case/{path}", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"].startswith("/ui/cases/urn:no:such:case?error=")
+
+
+def test_ui_execute_top_on_unknown_case_redirects_with_error(client: TestClient) -> None:
+    resp = client.post("/ui/cases/urn:no:such:case/execute-top", follow_redirects=False)
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+
+
+def test_ui_compensate_on_closed_case_still_works(client: TestClient) -> None:
+    """Compensate should reverse history even on a closed case."""
+
+    case_uri = _open_case(client)
+    client.post(
+        f"/cases/{case_uri}/execute",
+        json={"action_uri": UPDATE, "params": {"key": "diagnosed", "value": True}},
+    )
+    resp = client.post(f"/ui/cases/{case_uri}/compensate", follow_redirects=False)
+    assert resp.status_code == 303
+    body = client.get(f"/cases/{case_uri}").json()
+    assert body["state"]["properties"] == {"triage_level": "unknown"}

@@ -4,6 +4,21 @@
 <h1>Cases</h1>
 <p class="muted">{{ cases | length }} case(s){% if status %} with status <code>{{ status }}</code>{% endif %}.</p>
 
+{% if error %}
+<div class="callout error">{{ error }}</div>
+{% elif ticked is not none %}
+<div class="callout">Tick fired {{ ticked }} timer event(s).</div>
+{% endif %}
+
+<div class="actions-bar">
+  <form method="post" action="/ui/tick">
+    <button class="btn">Tick all timers</button>
+  </form>
+  <span class="muted" style="font-size: 0.85rem;">
+    Sweeps every open case for due timer_events and runs the associated action.
+  </span>
+</div>
+
 <div class="filter-bar">
   <a href="/ui/" class="{{ '' if status else 'active' }}">all</a>
   {% for option in ('open', 'suspended', 'closed', 'failed') %}
