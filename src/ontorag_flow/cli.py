@@ -218,6 +218,115 @@ def process_load(
     )
 
 
+@process_app.command("simulate")
+def process_simulate(
+    path: Path = typer.Argument(..., help="Path to a process definition (YAML or RDF)."),
+    state: list[str] = typer.Option(
+        [], "--state", "-s", help="Initial state KEY=VALUE; values are JSON-decoded if possible."
+    ),
+    execute_top: bool = typer.Option(
+        False,
+        "--execute-top/--no-execute",
+        help="Execute the top proposal and print the resulting case state.",
+    ),
+    explain: bool = typer.Option(
+        False,
+        "--explain/--no-explain",
+        help="Also print the engine's reasoning trace.",
+    ),
+) -> None:
+    """Dry-run a process: build an in-memory case, ask the engine, optionally execute.
+
+    Nothing is persisted — the case URI is synthetic, the SQLite store is
+    an in-memory copy, and exit returns the disk to its original state.
+    Use this while authoring a process YAML to verify the engine picks
+    what you expect for a given case state, without polluting the dev DB.
+    """
+
+    rdf_suffixes = {".ttl", ".rdf", ".n3", ".xml", ".jsonld", ".json-ld", ".nt"}
+    loader = load_process_rdf if path.suffix.lower() in rdf_suffixes else load_process
+    try:
+        process = loader(path)
+    except ProcessParseError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1) from exc
+
+    initial = _parse_params(state)
+
+    async def _run() -> None:
+        from ontorag_flow.stores.sqlite import SqliteStore as _Store
+
+        async with _Store(":memory:") as store:
+            settings = get_settings()
+            registry = default_registry()
+            ontorag_client = await maybe_connect_ontorag(
+                settings, on_error=lambda message: console.print(f"[yellow]{message}[/]")
+            )
+            try:
+                resolver = EngineResolver(
+                    registry=registry,
+                    ontorag_client=ontorag_client,
+                    llm_client=build_llm_client(settings),
+                )
+                executor = ActionExecutor(audit_store=store, agent="urn:ontorag-flow:simulate")
+                manager = CaseManager(
+                    case_store=store,
+                    process_store=store,
+                    executor=executor,
+                    registry=registry,
+                    engine_factory=resolver.for_process,
+                )
+                await manager.register_process(process)
+                case = await manager.create_case(process.process_uri, initial_state=initial)
+                console.print(
+                    f"[cyan]Simulated case[/] {case.case_uri} on process "
+                    f"[bold]{process.name}[/] (in-memory; not persisted)."
+                )
+                console.print(f"State: {json.dumps(case.state.properties, default=str)}")
+
+                proposals = await manager.propose_next(case.case_uri)
+                if not proposals:
+                    console.print("[yellow]Engine returned no proposals.[/]")
+                else:
+                    table = Table(title="Proposals (best-first)")
+                    table.add_column("Action", style="cyan")
+                    table.add_column("Conf", justify="right")
+                    table.add_column("Params", style="dim")
+                    table.add_column("Rationale")
+                    for proposal in proposals:
+                        table.add_row(
+                            proposal.action_uri,
+                            f"{proposal.confidence:.2f}"
+                            if proposal.confidence is not None
+                            else "—",
+                            json.dumps(proposal.params, default=str),
+                            proposal.rationale or "—",
+                        )
+                    console.print(table)
+
+                if explain:
+                    explanation = await manager.explain_next(case.case_uri)
+                    console.print(f"[dim]Engine[/]: [bold]{explanation.engine_kind}[/]")
+                    console.print("[dim]Trace[/]:")
+                    console.print_json(json.dumps(explanation.trace, default=str))
+
+                if execute_top and proposals:
+                    top = proposals[0]
+                    updated, _ = await manager.execute_action(
+                        case.case_uri, top.action_uri, top.params
+                    )
+                    console.print(
+                        f"[green]Executed[/] {top.action_uri} → state "
+                        f"{json.dumps(updated.state.properties, default=str)} "
+                        f"(status={updated.status.value})"
+                    )
+            finally:
+                if ontorag_client is not None:
+                    await ontorag_client.aclose()
+
+    asyncio.run(_run())
+
+
 @process_app.command("list")
 def process_list() -> None:
     """List persisted process definitions."""
