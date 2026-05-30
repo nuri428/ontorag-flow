@@ -95,9 +95,15 @@ def _load_plugin_actions(registry: ActionRegistry) -> None:
         try:
             action_cls = entry.load()
             instance = action_cls()
-            if not hasattr(instance, "uri"):
+            # Strict isinstance check rather than hasattr(..., "uri"). Hasattr
+            # accepts any class with a `uri` class var (e.g. a half-finished
+            # plugin missing execute()) and lets it register, then crashes at
+            # action-run time with bad locality. Fail fast at register time so
+            # the operator sees the offending entry-point name in the log.
+            if not isinstance(instance, BaseAction):
                 raise TypeError(
-                    f"{entry.value!r} resolved to {type(instance).__name__}, not a BaseAction"
+                    f"{entry.value!r} resolved to {type(instance).__name__}, "
+                    f"which is not a BaseAction subclass."
                 )
             registry.register(instance)
             logger.info("Registered plugin action %r from %s", instance.uri, entry.value)

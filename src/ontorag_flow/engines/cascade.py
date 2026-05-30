@@ -53,19 +53,27 @@ class CascadeEngine:
         return []
 
     async def explain(self, case: Case, process: ProcessDefinition) -> EngineExplanation:
-        """Trace records what each engine returned and which one was chosen."""
+        """Trace records what each engine returned and which one was chosen.
+
+        Short-circuits at the winner — engines after the chosen one are *not*
+        invoked, because explain() must not change the cost profile of the
+        recommendation. Post-winner entries are recorded as ``consulted: false``
+        so the operator can see *which* engines were the fallback tail without
+        triggering an LLM/Bayesian call for each just to count.
+        """
 
         attempts: list[dict[str, object]] = []
         chosen: str | None = None
         winning_proposals: list[ActionProposal] = []
         for kind, engine in self._engines:
+            if chosen is not None:
+                attempts.append({"kind": kind, "consulted": False, "count": None})
+                continue
             proposals = await engine.propose_next(case, process)
-            attempts.append({"kind": kind, "count": len(proposals)})
-            if proposals and chosen is None:
+            attempts.append({"kind": kind, "consulted": True, "count": len(proposals)})
+            if proposals:
                 chosen = kind
                 winning_proposals = proposals
-                # Keep scanning so the trace records what every engine would have
-                # said — operator can see "rule also had 3 ideas, but llm won".
         return EngineExplanation(
             engine_kind="CascadeEngine",
             proposals=winning_proposals,

@@ -9,9 +9,10 @@ for a given case.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from ontorag_flow.api.deps import get_store
@@ -63,6 +64,17 @@ async def aggregate_audit(
         None,
         description="Optional filter — only count activities whose case belongs to this process.",
     ),
+    limit: int = Query(
+        10_000,
+        ge=1,
+        le=100_000,
+        description=(
+            "Cap on activities scanned. The endpoint loads activities into "
+            "memory for in-process counting; this cap exists so a runaway "
+            "table can't OOM the server. Push the limit up when you know "
+            "the activities table is bounded (e.g. after retention purge)."
+        ),
+    ),
     store: SqliteStore = Depends(get_store),
 ) -> list[AuditAggregateRow]:
     """Cross-case audit aggregation — "what's hot in the system right now?".
@@ -75,27 +87,27 @@ async def aggregate_audit(
     Operational uses: catch a rule that's firing far more often than
     expected, find the case with the deepest history, surface a failed
     activity cluster after an incident.
+
+    Scale note: aggregation is currently in-process. Hard cap defaults to
+    10,000 activities; for installations exceeding that, push the bucket
+    counting into SQL (``GROUP BY``) instead — tracked as a follow-up.
     """
 
     activities = await store.list_all()
+    if len(activities) > limit:
+        activities = activities[-limit:]  # newest-N — operationally most useful
 
     if process_uri is not None:
         cases = await store.find_cases(process_uri=process_uri)
         keep = {case.case_uri for case in cases}
         activities = [activity for activity in activities if activity.case_uri in keep]
 
-    keys: list[str] = []
-    for activity in activities:
-        if group_by == "action_uri":
-            keys.append(activity.action_uri)
-        elif group_by == "case_uri":
-            keys.append(activity.case_uri or "")
-        elif group_by == "status":
-            keys.append(activity.status)
-        elif group_by == "agent":
-            keys.append(activity.agent or "")
-        else:  # pragma: no cover — Literal already constrains the enum
-            raise HTTPException(status_code=400, detail=f"Unsupported group_by: {group_by}")
-
-    counts = Counter(k for k in keys if k)
+    extractors: dict[GroupBy, Callable[[ProvOActivity], str]] = {
+        "action_uri": lambda a: a.action_uri,
+        "case_uri": lambda a: a.case_uri or "",
+        "status": lambda a: a.status,
+        "agent": lambda a: a.agent or "",
+    }
+    extract = extractors[group_by]
+    counts = Counter(key for activity in activities if (key := extract(activity)))
     return [AuditAggregateRow(key=key, count=count) for key, count in counts.most_common()]

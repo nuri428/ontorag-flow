@@ -389,89 +389,105 @@ def process_test(
 
 
 async def _run_process_tests(process: Any, expectations: list[Any]) -> list[str]:
-    """Drive each expectation against an in-memory case; return failure messages."""
+    """Drive each expectation against an isolated in-memory case.
+
+    Each expectation gets its *own* :memory: store + executor + manager. The
+    earlier version shared one store across all expectations, which leaked
+    earlier cases and activities into later engine calls — stateful engines
+    (Bayesian, LLM) could observe prior expectations' state. Per-expectation
+    isolation is the only way to call this a regression-test runner.
+
+    The ontorag MCP client is opened once and shared (it is read-only from
+    this CLI's POV — no per-expectation mutation).
+    """
+
+    failures: list[str] = []
+    settings = get_settings()
+    ontorag_client = await maybe_connect_ontorag(
+        settings, on_error=lambda message: console.print(f"[yellow]{message}[/]")
+    )
+    try:
+        for index, raw_expectation in enumerate(expectations):
+            label, expectation_failures = await _run_single_expectation(
+                process=process,
+                raw_expectation=raw_expectation,
+                index=index,
+                settings=settings,
+                ontorag_client=ontorag_client,
+            )
+            for message in expectation_failures:
+                failures.append(f"{label}: {message}")
+    finally:
+        if ontorag_client is not None:
+            await ontorag_client.aclose()
+    return failures
+
+
+async def _run_single_expectation(
+    *,
+    process: Any,
+    raw_expectation: Any,
+    index: int,
+    settings: Any,
+    ontorag_client: Any,
+) -> tuple[str, list[str]]:
+    """Run one expectation in its own store; return (label, list of failures)."""
 
     from ontorag_flow.stores.sqlite import SqliteStore as _Store
 
+    if not isinstance(raw_expectation, dict):
+        return f"#{index + 1}", ["expectation must be a mapping"]
+    label = raw_expectation.get("name") or f"expectation #{index + 1}"
+    given = raw_expectation.get("given_state") or {}
+    if not isinstance(given, dict):
+        return label, ["given_state must be a mapping"]
+
     failures: list[str] = []
-
     async with _Store(":memory:") as store:
-        settings = get_settings()
         registry = default_registry()
-        ontorag_client = await maybe_connect_ontorag(
-            settings, on_error=lambda message: console.print(f"[yellow]{message}[/]")
+        resolver = EngineResolver(
+            registry=registry,
+            ontorag_client=ontorag_client,
+            llm_client=build_llm_client(settings),
         )
-        try:
-            resolver = EngineResolver(
-                registry=registry,
-                ontorag_client=ontorag_client,
-                llm_client=build_llm_client(settings),
-            )
-            executor = ActionExecutor(audit_store=store, agent="urn:ontorag-flow:process-test")
-            manager = CaseManager(
-                case_store=store,
-                process_store=store,
-                executor=executor,
-                registry=registry,
-                engine_factory=resolver.for_process,
-            )
-            await manager.register_process(process)
+        executor = ActionExecutor(audit_store=store, agent="urn:ontorag-flow:process-test")
+        manager = CaseManager(
+            case_store=store,
+            process_store=store,
+            executor=executor,
+            registry=registry,
+            engine_factory=resolver.for_process,
+        )
+        await manager.register_process(process)
 
-            for index, raw_expectation in enumerate(expectations):
-                if not isinstance(raw_expectation, dict):
-                    failures.append(f"#{index + 1}: expectation must be a mapping")
-                    continue
-                name = raw_expectation.get("name") or f"expectation #{index + 1}"
-                given = raw_expectation.get("given_state") or {}
-                if not isinstance(given, dict):
-                    failures.append(f"{name}: given_state must be a mapping")
-                    continue
+        case = await manager.create_case(process.process_uri, initial_state=given)
+        proposals = await manager.propose_next(case.case_uri)
 
-                case = await manager.create_case(process.process_uri, initial_state=given)
-                proposals = await manager.propose_next(case.case_uri)
+        proposes = raw_expectation.get("proposes")
+        if proposes is not None and (not proposals or proposals[0].action_uri != proposes):
+            actual = proposals[0].action_uri if proposals else "(none)"
+            failures.append(f"expected top proposal {proposes!r}, got {actual!r}")
 
-                proposes = raw_expectation.get("proposes")
-                if proposes is not None:
-                    if not proposals or proposals[0].action_uri != proposes:
-                        actual = proposals[0].action_uri if proposals else "(none)"
+        if raw_expectation.get("proposes_none") and proposals:
+            failures.append(f"expected no proposals, got {[p.action_uri for p in proposals]}")
+
+        after_execute = raw_expectation.get("after_execute_top")
+        if after_execute:
+            if not proposals:
+                failures.append("after_execute_top declared but engine returned no proposals")
+            else:
+                top = proposals[0]
+                updated, _ = await manager.execute_action(case.case_uri, top.action_uri, top.params)
+                expected_state = (
+                    (after_execute.get("state") or {}) if isinstance(after_execute, dict) else {}
+                )
+                for key, value in expected_state.items():
+                    if updated.state.properties.get(key) != value:
                         failures.append(
-                            f"{name}: expected top proposal {proposes!r}, got {actual!r}"
+                            f"after_execute_top.state[{key!r}] expected {value!r}, "
+                            f"got {updated.state.properties.get(key)!r}"
                         )
-
-                if raw_expectation.get("proposes_none"):
-                    if proposals:
-                        failures.append(
-                            f"{name}: expected no proposals, got {[p.action_uri for p in proposals]}"
-                        )
-
-                after_execute = raw_expectation.get("after_execute_top")
-                if after_execute:
-                    if not proposals:
-                        failures.append(
-                            f"{name}: after_execute_top declared but engine returned no proposals"
-                        )
-                        continue
-                    top = proposals[0]
-                    updated, _ = await manager.execute_action(
-                        case.case_uri, top.action_uri, top.params
-                    )
-                    expected_state = (
-                        (after_execute.get("state") or {})
-                        if isinstance(after_execute, dict)
-                        else {}
-                    )
-                    actual_state = updated.state.properties
-                    for key, value in expected_state.items():
-                        if actual_state.get(key) != value:
-                            failures.append(
-                                f"{name}: after_execute_top.state[{key!r}] expected {value!r}, "
-                                f"got {actual_state.get(key)!r}"
-                            )
-        finally:
-            if ontorag_client is not None:
-                await ontorag_client.aclose()
-
-    return failures
+    return label, failures
 
 
 @process_app.command("list")

@@ -49,17 +49,41 @@ async def test_all_empty_returns_empty() -> None:
     assert await engine.propose_next(_case(), _proc()) == []
 
 
-async def test_explain_records_every_attempt_and_chosen() -> None:
-    engine = CascadeEngine(
-        [("first", _Empty()), ("second", _OneProposal("Second")), ("third", _OneProposal("Third"))]
-    )
+async def test_explain_short_circuits_at_winner() -> None:
+    """explain() must not invoke engines after the winner — same cost as propose_next."""
+
+    class _CountingEngine:
+        def __init__(self, label: str) -> None:
+            self.label = label
+            self.calls = 0
+
+        async def propose_next(
+            self, case: Case, process: ProcessDefinition
+        ) -> list[ActionProposal]:
+            self.calls += 1
+            return [ActionProposal(action_uri="urn:a", proposed_by=self.label, confidence=1.0)]
+
+    first = _Empty()
+    second = _CountingEngine("Second")
+    third = _CountingEngine("Third")
+
+    engine = CascadeEngine([("first", first), ("second", second), ("third", third)])
     explanation = await engine.explain(_case(), _proc())
+
     assert explanation.engine_kind == "CascadeEngine"
     assert explanation.trace["sequence"] == ["first", "second", "third"]
     assert explanation.trace["chosen"] == "second"
-    attempts = {entry["kind"]: entry["count"] for entry in explanation.trace["attempts"]}
-    # first contributed 0; the second won with 1; the third also had 1 (logged for the operator)
-    assert attempts == {"first": 0, "second": 1, "third": 1}
+    # third must not have been called — that's the whole point.
+    assert third.calls == 0
+    assert second.calls == 1
+
+    # The post-winner entry is recorded as not consulted, so the operator
+    # still sees the fallback tail without paying for it.
+    attempts = {entry["kind"]: entry for entry in explanation.trace["attempts"]}
+    assert attempts["first"] == {"kind": "first", "consulted": True, "count": 0}
+    assert attempts["second"] == {"kind": "second", "consulted": True, "count": 1}
+    assert attempts["third"] == {"kind": "third", "consulted": False, "count": None}
+
     assert len(explanation.proposals) == 1
     assert explanation.proposals[0].proposed_by == "Second"
 

@@ -191,14 +191,14 @@
       {% for attempt in trace.attempts %}
         <tr>
           <td><span class="badge">{{ attempt.kind }}</span></td>
-          <td>{{ attempt.count }}</td>
+          <td>{{ '—' if attempt.count is none else attempt.count }}</td>
           <td>
             {% if attempt.kind == trace.chosen %}
               <span class="badge open">chosen</span>
-            {% elif attempt.count == 0 %}
-              <span class="badge">empty → fallback</span>
+            {% elif not attempt.consulted %}
+              <span class="badge">not consulted (fallback tail)</span>
             {% else %}
-              <span class="badge">would have fired</span>
+              <span class="badge">empty → fallback</span>
             {% endif %}
           </td>
         </tr>

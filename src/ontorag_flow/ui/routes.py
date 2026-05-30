@@ -167,15 +167,21 @@ def _build_process_svg(process: Any) -> str:
             f"</g>"
         )
 
-    # timer event nodes (above target action with an arrow in)
-    for index, entry in enumerate(timer_events):
+    # timer event nodes (above target action with an arrow in).
+    # X-offset is per-target so multiple timers on the same action stagger
+    # only relative to each other — global enumerate-index would push the Nth
+    # timer off-canvas even when only one targets its action.
+    per_target_index: dict[str, int] = {}
+    for entry in timer_events:
         if not isinstance(entry, dict):
             continue
         target = entry.get("action")
         if target not in positions:
             continue
+        local_index = per_target_index.get(target, 0)
+        per_target_index[target] = local_index + 1
         tx, ty = _center(target)
-        timer_x = positions[target][0] + index * 18
+        timer_x = positions[target][0] + local_index * 18
         timer_y = positions[target][1] - 38
         after = entry.get("after_minutes", 0)
         parts.append(
@@ -287,9 +293,13 @@ async def process_detail(
     request: Request,
     process_uri: str,
     manager: CaseManager = Depends(get_case_manager),
-    store=Depends(get_store),
 ) -> HTMLResponse:
-    """Single-process analytics — status mix, hottest actions, average history length."""
+    """Single-process analytics — status mix, hottest actions, average history length.
+
+    Counts are computed from already-hydrated ``case.history`` rather than a
+    second ``store.list_all()`` pass — find_cases bounds the work to this
+    process's cases, so we never load activities belonging to other processes.
+    """
 
     from collections import Counter
 
@@ -298,14 +308,12 @@ async def process_detail(
         raise HTTPException(status_code=404, detail=f"No such process: {process_uri}")
 
     cases = await manager.find_cases(process_uri=process_uri)
-    case_uris = {case.case_uri for case in cases}
-
-    activities = await store.list_all()
-    activities = [activity for activity in activities if activity.case_uri in case_uris]
+    history_lengths = [len(case.history) for case in cases]
+    action_counts: Counter[str] = Counter()
+    for case in cases:
+        action_counts.update(event.action_uri for event in case.history)
 
     status_counts = Counter(case.status.value for case in cases)
-    action_counts = Counter(activity.action_uri for activity in activities)
-    history_lengths = [len(case.history) for case in cases]
     avg_history = sum(history_lengths) / len(history_lengths) if history_lengths else 0.0
 
     return templates.TemplateResponse(
@@ -316,7 +324,7 @@ async def process_detail(
             case_count=len(cases),
             status_counts=dict(status_counts),
             top_actions=action_counts.most_common(10),
-            activity_count=len(activities),
+            activity_count=sum(history_lengths),
             avg_history=avg_history,
             max_history=max(history_lengths) if history_lengths else 0,
         ),
