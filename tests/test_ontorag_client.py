@@ -162,6 +162,28 @@ async def test_list_tools_returns_tool_names() -> None:
     assert names == ["find_entities", "describe_entity"]
 
 
+async def test_await_task_swallows_exceptions_during_teardown() -> None:
+    """``aclose()`` after a task crashed mid-life must not re-raise."""
+
+    import asyncio
+
+    client = OntoragClient("http://localhost:8000/mcp")
+
+    async def _crash() -> None:
+        raise RuntimeError("simulated mid-life crash")
+
+    task: asyncio.Task[None] = asyncio.create_task(_crash())
+    # Let it finish so the exception is set on the task.
+    try:
+        await task
+    except RuntimeError:
+        pass
+
+    client._task = task  # type: ignore[attr-defined]
+    # aclose() should not re-raise the swallowed exception.
+    await client.aclose()
+
+
 async def test_zombie_guard_uses_connect_error_when_cancelled() -> None:
     """When the serve task was cancelled, fall back to ``_connect_error`` for the cause."""
 
