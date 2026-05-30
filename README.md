@@ -1,5 +1,7 @@
 # ontorag-flow
 
+> **English | [한국어](README.ko.md)**
+
 > **Ontology-grounded adaptive case management — the Kinetic layer over [ontorag](https://github.com/ontorag).**
 > If ontorag is *"what is and what we believe"*, ontorag-flow is *"what we do about it"*.
 
@@ -207,8 +209,6 @@ A condensed map of "what you can do with this repo and how". Detailed
 behaviour is in `--help` for every CLI command and in the inline
 docstrings; this section is the index.
 
-### English
-
 #### Example use cases (runnable today)
 
 | What | Where | What it demonstrates |
@@ -270,71 +270,10 @@ docstrings; this section is the index.
 
 ---
 
-### 한국어
-
-#### 실행 가능한 예제 (use case)
-
-| 하고 싶은 것 | 위치 | 보여주는 것 |
-|---|---|---|
-| 결정 트리로 케이스 자동 종료 | `examples/medical_triage/run_demo.py` | `RuleEngine`, 목표 도달 시 자동 close, PROV-O Turtle 내보내기 |
-| 사람 개입이 있는 개방형 조사 | `examples/supply_chain_rca/run_demo.py` | 커스텀 도메인 액션, `EXTERNAL_API`/`HUMAN` 부수효과, `requires` 제약, 자동 suspend → resume → close |
-| 같은 프로세스를 LLM 엔진으로 (fake 또는 live) | `examples/supply_chain_rca/run_demo_llm.py` | `LlmAgentEngine`, 코드 안에서 `engine: llm` override, hallucinated URI는 allowed 필터로 차단 |
-| 보상(saga 롤백) | `ontorag-flow case compensate <case_uri>` | `action.compensate` 훅, `state_before`로 상태 복원, audit는 모든 이벤트 보존 |
-| 반사실 "Y였다면?" 시뮬레이션 | `ontorag-flow case counterfactual ...` | `CausalSimulationEngine` via ontorag MCP (ontorag v0.8 필요) |
-| 라이브 PostgreSQL 백엔드 | `docker compose --profile postgres up` + `tests/test_postgres_store_integration.py` | `PostgresStore` round-trip via testcontainers |
-| UI에서 케이스/액션/감사 둘러보기 | `ontorag-flow serve` → `http://localhost:8100/ui/` | `Tick all timers`, 상태 필터, 케이스 링크가 있는 라이브 대시보드 |
-| 브라우저에서 lifecycle 직접 운용 | `/ui/cases/<uri>` → Suspend / Resume / Execute top proposal / Compensate / Spawn subcase | Form POST + 303 redirect 패턴, JS-free; 상태별 conditional 버튼 |
-| "왜 엔진이 그것을 추천했나?" 진단 | `/ui/cases/<uri>/explain` | `engine.explain()` 을 engine-specific 카드로 (규칙-발화 표 / posterior 막대 / LLM prompt / proposer-vs-validator 비교) |
-| 과거 activity를 swap해서 재생 | `/ui/cases/<uri>/audit` → 행의 "Counterfactual" 링크 | causal engine에 대한 read-only "Y였다면?" 폼 |
-| YAML에서 proposer + causal validator 합성 | `engine: stacked` + `arbitration: {proposer: rule\|bayesian\|llm\|human, validator: causal}` | 두 엔진 arbitration을 모델에 선언, Python wiring 불필요 |
-| 프로세스를 YAML 대신 RDF로 정의 | `ontorag-flow process load <process.ttl\|process.jsonld>` | `urn:ontorag-flow:process#` vocabulary, engine / causal / constraints / timer_events / arbitration 전 필드 round-trip |
-| ontorag ABox에 트리플 write-back | `allowed_actions` 에 `AssertTriple` / `RetractTriple` (live `OntoragClient` 필요) | `ABOX_WRITE` 부수효과 + 롤백 시 retract하는 saga `compensate` |
-
-#### CLI 도구
-
-| 명령 | 용도 |
-|---|---|
-| `ontorag-flow init` | `.env.example`에서 `.env` 부트스트랩 |
-| `ontorag-flow status` | 설정 + ontorag MCP 연결 점검 표시 |
-| `ontorag-flow serve` | FastAPI + MCP 서버 실행 (`/ui`, `/mcp`, REST 마운트) |
-| `ontorag-flow action list / register / run` | 액션 카탈로그 보기, 플러그인 등록, ad-hoc 실행 |
-| `ontorag-flow process load / list` | YAML(또는 Turtle) 프로세스 로드 및 조회 |
-| `ontorag-flow case create / status` | 케이스 생성 + 상태/히스토리/상태값 표시 |
-| `ontorag-flow case propose-next` | 실행하지 않고 결정 엔진 추천만 받기 |
-| `ontorag-flow case execute` | 선택한 액션을 케이스에 실행 |
-| `ontorag-flow case compensate` | 실행된 액션 꼬리를 saga 방식으로 롤백 |
-| `ontorag-flow case suspend / resume` | 케이스 일시 정지 / 재개 |
-| `ontorag-flow case fork` | 소스 케이스의 상태+히스토리를 복사한 새 케이스 |
-| `ontorag-flow case subcase` | 부모 아래 자식 케이스 생성 (자식 종료 시 부모 state로 투영) |
-| `ontorag-flow case tick` | 모든 열린 케이스에 대해 만기된 타이머 발화 |
-| `ontorag-flow case counterfactual` | "이 단계에서 Y였다면?"을 causal 엔진으로 |
-| `ontorag-flow audit show / export` | PROV-O 감사 trail 조회 / 렌더링 (JSON-LD · Turtle) |
-
-#### 결정 엔진 (프로세스의 `engine:`로 선택, 미지정 시 resolver 추론)
-
-| 엔진 | 언제 쓰는가 | 백킹 클라이언트 |
-|---|---|---|
-| `RuleEngine` | 도메인이 결정 테이블로 표현 가능, 외부 서비스 불필요 | 없음 |
-| `BayesianMpeEngine` | 관측적 `P(goal \| evidence)` 필요 | ontorag MCP (v0.7) |
-| `CausalSimulationEngine` | 개입적 `P(goal \| do(...))` 필요 — Pearl Rung 2 | ontorag MCP (v0.8) |
-| `LlmAgentEngine` | 개방형 가설 공간, 자유로운 추론 | Anthropic / OpenAI / Ollama |
-| `HumanReviewEngine` | 항상 사람 검토자에게 위임 | 없음 |
-| `StackedEngine` | proposer + causal validator 합성 — YAML에 `engine: stacked` + `arbitration: {proposer: rule\|bayesian\|llm\|human, validator: causal}` 로 선언 | proposer의 client + ontorag MCP |
-
-#### 내장 액션
-
-| 액션 URI | 부수효과 | 동작 |
-|---|---|---|
-| `urn:ontorag-flow:action:UpdateCaseProperty` | CASE_STATE | 케이스 상태에 속성 하나를 설정 |
-| `urn:ontorag-flow:action:SetGoal` | CASE_STATE | 목표 술어를 선언 / 교체 |
-| `urn:ontorag-flow:action:RequestHumanReview` | HUMAN + CASE_STATE | 사람 검토 대상으로 표시 — 자동 suspend |
-| `urn:ontorag-flow:action:AssertTriple` | ABOX_WRITE | ontorag의 ABox에 (s, p, o) 트리플 하나를 기록 (OntoragClient가 살아 있을 때만 등록) |
-| `urn:ontorag-flow:action:RetractTriple` | ABOX_WRITE | ontorag의 ABox에서 (s, p, o) 트리플 하나를 제거 (AssertTriple과 서로 saga-compensate) |
-
----
-
 ## Deep reading
 
+- [`README.ko.md`](README.ko.md) — **Korean translation** of this README
+  (한국어 번역). Same structure, kept in lockstep on docs updates.
 - [`docs/operator-guide.md`](docs/operator-guide.md) — **operator
   guide** for the browser UI (EN + KO). What each lifecycle button does,
   how to read error callouts, common scenarios, counterfactual replay,
