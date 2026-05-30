@@ -51,3 +51,26 @@ def default_registry() -> ActionRegistry:
     registry.register(SetGoal())
     registry.register(RequestHumanReview())
     return registry
+
+
+def with_triple_actions(registry: ActionRegistry, client: object) -> ActionRegistry:
+    """Add the ABox write-back actions, bound to an ``OntoragClient``.
+
+    Kept separate from :func:`default_registry` because
+    :class:`AssertTriple` / :class:`RetractTriple` need a live MCP client
+    injected — they have an ``ABOX_WRITE`` side effect, which is illegal
+    to register if the client is absent. The composition root (CLI /
+    API lifespan) calls this *after* successfully constructing the
+    client, and only then.
+    """
+
+    from ontorag_flow.actions.triples import AssertTriple, RetractTriple
+
+    if not hasattr(client, "call_tool"):
+        raise TypeError(
+            "with_triple_actions requires an OntoragClient-shaped client "
+            "(must expose async call_tool)."
+        )
+    registry.register(AssertTriple(client))  # type: ignore[arg-type]
+    registry.register(RetractTriple(client))  # type: ignore[arg-type]
+    return registry

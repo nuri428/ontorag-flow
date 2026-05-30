@@ -17,7 +17,7 @@ from ontorag_flow.api.routes import actions, audit, cases, health, processes
 from ontorag_flow.config import get_settings
 from ontorag_flow.core.case_manager import CaseManager
 from ontorag_flow.core.executor import ActionExecutor
-from ontorag_flow.core.registry import ActionRegistry, default_registry
+from ontorag_flow.core.registry import ActionRegistry, default_registry, with_triple_actions
 from ontorag_flow.engines.selection import EngineResolver
 from ontorag_flow.engines.wiring import build_llm_client, maybe_connect_ontorag
 from ontorag_flow.log import get_logger
@@ -59,6 +59,10 @@ def create_app(
 
         llm_client = build_llm_client(settings)
         ontorag_client = await maybe_connect_ontorag(settings)
+        if ontorag_client is not None:
+            # ABox write-back actions need a live MCP client; only register them
+            # once the connection is confirmed.
+            with_triple_actions(resolved_registry, ontorag_client)
         resolver = EngineResolver(
             registry=resolved_registry,
             ontorag_client=ontorag_client,

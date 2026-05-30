@@ -13,12 +13,14 @@ from typing import Any
 import pytest
 
 from ontorag_flow.ontorag_client.tools import (
+    assert_triple,
     compute_posterior,
     counterfactual,
     describe_entity,
     do_query,
     find_entities,
     get_schema,
+    retract_triple,
     smoke_test,
 )
 
@@ -79,3 +81,30 @@ async def test_counterfactual_forwards_all_three(client: FakeClient) -> None:
 async def test_smoke_test_returns_true_on_success(client: FakeClient) -> None:
     assert await smoke_test(client) is True  # type: ignore[arg-type]
     assert client.calls == [("find_entities", {"query": "*", "limit": 1})]
+
+
+async def test_assert_triple_forwards_spo_without_graph(client: FakeClient) -> None:
+    await assert_triple(client, "urn:s", "urn:p", "urn:o")  # type: ignore[arg-type]
+    assert client.calls == [
+        ("assert_triple", {"subject": "urn:s", "predicate": "urn:p", "object": "urn:o"})
+    ]
+
+
+async def test_assert_triple_includes_named_graph_when_given(client: FakeClient) -> None:
+    await assert_triple(client, "urn:s", "urn:p", "urn:o", graph="urn:g")  # type: ignore[arg-type]
+    assert client.calls == [
+        (
+            "assert_triple",
+            {"subject": "urn:s", "predicate": "urn:p", "object": "urn:o", "graph": "urn:g"},
+        )
+    ]
+
+
+async def test_retract_triple_mirrors_assert_triple_shape(client: FakeClient) -> None:
+    await retract_triple(client, "urn:s", "urn:p", "urn:o", graph="urn:g")  # type: ignore[arg-type]
+    assert client.calls == [
+        (
+            "retract_triple",
+            {"subject": "urn:s", "predicate": "urn:p", "object": "urn:o", "graph": "urn:g"},
+        )
+    ]

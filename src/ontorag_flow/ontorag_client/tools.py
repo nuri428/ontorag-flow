@@ -56,6 +56,50 @@ async def counterfactual(
     )
 
 
+async def assert_triple(
+    client: OntoragClient,
+    subject: str,
+    predicate: str,
+    object_: str,
+    *,
+    graph: str | None = None,
+) -> Any:
+    """Write one ``(s, p, o)`` triple to ontorag's ABox (requires ontorag v0.7.x).
+
+    The CLAUDE.md *Open question* "Write-back to ontorag" picks
+    ``assert_triple`` over a ``load_rdf`` round-trip for the
+    single-triple-per-call write path — fewer hops, no RDF serialisation,
+    typed at the tool boundary. When ontorag exposes the tool, this is
+    the fast path the :class:`AssertTriple` action calls.
+    """
+
+    args: dict[str, Any] = {"subject": subject, "predicate": predicate, "object": object_}
+    if graph is not None:
+        args["graph"] = graph
+    return await client.call_tool("assert_triple", args)
+
+
+async def retract_triple(
+    client: OntoragClient,
+    subject: str,
+    predicate: str,
+    object_: str,
+    *,
+    graph: str | None = None,
+) -> Any:
+    """Remove one ``(s, p, o)`` triple from ontorag's ABox (requires ontorag v0.7.x).
+
+    The compensation pair to :func:`assert_triple` — saga rollback of an
+    earlier write goes through this so the ABox returns to its pre-action
+    shape.
+    """
+
+    args: dict[str, Any] = {"subject": subject, "predicate": predicate, "object": object_}
+    if graph is not None:
+        args["graph"] = graph
+    return await client.call_tool("retract_triple", args)
+
+
 async def smoke_test(client: OntoragClient) -> bool:
     """Verify the ontorag connection works via a trivial ``find_entities`` call.
 
