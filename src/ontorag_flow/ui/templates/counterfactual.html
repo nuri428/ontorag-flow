@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Counterfactual — {{ case.case_uri }}{% endblock %}
+{% block content %}
+<h1>Counterfactual replay</h1>
+<p class="muted">
+  case: <code class="uri">{{ case.case_uri }}</code> —
+  <a href="/ui/cases/{{ case.case_uri }}/audit">back to audit</a>
+</p>
+<p class="muted">
+  "What would the case look like if, instead of the highlighted activity, this other
+  action had been chosen?" Pearl Rung 3 — only available when the engine is causal.
+</p>
+
+<h2>Swap target</h2>
+<dl class="kv">
+  <dt>Activity</dt><dd class="uri">{{ swap_activity.activity_uri }}</dd>
+  <dt>Original action</dt><dd class="uri">{{ swap_activity.action_uri }}</dd>
+  <dt>Used (inputs)</dt><dd><code>{{ swap_activity.used | tojson }}</code></dd>
+  <dt>Generated (outputs)</dt><dd><code>{{ swap_activity.generated | tojson }}</code></dd>
+</dl>
+
+<h2>Replace with</h2>
+<form method="post" action="/ui/cases/{{ case.case_uri }}/counterfactual">
+  <input type="hidden" name="swap_activity_uri" value="{{ swap_activity.activity_uri }}">
+  <div class="kv">
+    <dt><label for="cf-action">Action</label></dt>
+    <dd>
+      <select id="cf-action" name="action_uri" required>
+        {% for action in actions %}
+          <option value="{{ action }}">{{ action }}</option>
+        {% endfor %}
+      </select>
+    </dd>
+    <dt><label for="cf-params">Params (JSON)</label></dt>
+    <dd>
+      <textarea id="cf-params" name="params_json" rows="3" cols="60"
+                style="font-family: var(--mono); font-size: 0.85rem;">{}</textarea>
+    </dd>
+  </div>
+  <div style="margin-top: 0.5rem;">
+    <button class="btn primary" type="submit">Replay</button>
+  </div>
+</form>
+
+{% if error %}
+<div class="callout error">{{ error }}</div>
+{% endif %}
+
+{% if result %}
+<h2>Result</h2>
+<dl class="kv">
+  <dt>Counterfactual action</dt><dd class="uri">{{ result.counterfactual_action_uri }}</dd>
+  <dt>Counterfactual params</dt><dd><code>{{ result.counterfactual_params | tojson }}</code></dd>
+  <dt>Target</dt><dd><code>{{ result.target | tojson }}</code></dd>
+  <dt>Posterior</dt>
+  <dd>
+    <span class="confidence-bar"><span style="width: {{ (result.posterior * 100) | round(0) }}%"></span></span>
+    {{ '%.3f' | format(result.posterior) }}
+  </dd>
+  <dt>Rationale</dt><dd>{{ result.rationale }}</dd>
+</dl>
+{% endif %}
+{% endblock %}

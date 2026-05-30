@@ -12,6 +12,7 @@
   <thead><tr>
     <th>Activity</th><th>Action</th><th>Agent</th><th>Started</th><th>Ended</th>
     <th>Used (inputs)</th><th>Generated (outputs)</th><th>Informed by</th><th>Status</th>
+    <th>What-if</th>
   </tr></thead>
   <tbody>
   {% for activity in activities %}
@@ -27,6 +28,9 @@
       <td>
         {% if activity.success %}<span class="badge closed">ok</span>
         {% else %}<span class="badge failed">fail</span>{% endif %}
+      </td>
+      <td>
+        <a href="/ui/cases/{{ case_uri }}/counterfactual?swap={{ activity.activity_uri }}">Counterfactual</a>
       </td>
     </tr>
   {% endfor %}
