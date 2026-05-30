@@ -99,6 +99,7 @@ def create_app(
     app.include_router(processes.router)
     app.include_router(cases.router)
     app.include_router(audit.router)
+    app.include_router(audit.aggregate_router)
     app.include_router(ui_router)
     app.mount("/ui/static", ui_static_files, name="ui-static")
 
