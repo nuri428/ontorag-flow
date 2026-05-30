@@ -46,9 +46,7 @@ async def test_process_and_case_roundtrip(pg_store: PostgresStore) -> None:
     await pg_store.save_process(proc)
     assert await pg_store.get_process("urn:p:pg") == proc
 
-    case = Case(
-        case_uri="urn:c:pg", process_uri="urn:p:pg", state=CaseState(case_uri="urn:c:pg")
-    )
+    case = Case(case_uri="urn:c:pg", process_uri="urn:p:pg", state=CaseState(case_uri="urn:c:pg"))
     await pg_store.create_case(case)
     await pg_store.update_case(case.with_status(CaseStatus.CLOSED))
 

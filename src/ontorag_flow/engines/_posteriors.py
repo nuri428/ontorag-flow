@@ -50,9 +50,7 @@ def extract_posterior(result: Any) -> float:
 
     posterior = float(value)
     if not 0.0 <= posterior <= 1.0:
-        raise ValueError(
-            f"Posterior {posterior} is outside the valid probability range [0, 1]."
-        )
+        raise ValueError(f"Posterior {posterior} is outside the valid probability range [0, 1].")
     return posterior
 
 

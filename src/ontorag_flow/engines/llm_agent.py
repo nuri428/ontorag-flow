@@ -70,9 +70,7 @@ class LlmAgentEngine:
         self._registry = registry
         self._max_proposals = max_proposals
 
-    async def propose_next(
-        self, case: Case, process: ProcessDefinition
-    ) -> list[ActionProposal]:
+    async def propose_next(self, case: Case, process: ProcessDefinition) -> list[ActionProposal]:
         """Ask the LLM for ranked next-action proposals.
 
         Args:
@@ -122,8 +120,7 @@ class LlmAgentEngine:
         params = sorted(schema.get("properties", {}).keys())
         required = schema.get("required", [])
         return (
-            f"- {uri}: {action.description or action.name} "
-            f"(params: {params}; required: {required})"
+            f"- {uri}: {action.description or action.name} (params: {params}; required: {required})"
         )
 
     def _parse(self, raw: str, process: ProcessDefinition) -> list[ActionProposal]:
@@ -180,7 +177,7 @@ def _extract_json_array(raw: str) -> list[Any] | None:
         if len(fence) >= 2:
             body = fence[1]
             if body.startswith("json"):
-                body = body[len("json"):]
+                body = body[len("json") :]
             text = body.strip()
 
     try:

@@ -33,6 +33,7 @@ class FakeOntorag:
 def _causal_factory(client):  # type: ignore[no-untyped-def]
     def _factory(process):  # type: ignore[no-untyped-def]
         return CausalSimulationEngine(client)
+
     return _factory
 
 

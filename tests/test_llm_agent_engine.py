@@ -44,9 +44,7 @@ def _process(allowed: list[str] | None = None) -> ProcessDefinition:
 
 
 def _case(properties: dict | None = None) -> Case:
-    return Case(
-        case_uri="urn:c", process_uri="urn:p", state=CaseState(properties=properties or {})
-    )
+    return Case(case_uri="urn:c", process_uri="urn:p", state=CaseState(properties=properties or {}))
 
 
 async def test_parses_and_ranks_by_confidence() -> None:
@@ -64,7 +62,9 @@ async def test_parses_and_ranks_by_confidence() -> None:
 
 async def test_filters_disallowed_actions() -> None:
     reply = f'[{{"action_uri":"{OTHER}","confidence":1.0}},{{"action_uri":"{UPDATE}","confidence":0.5}}]'
-    proposals = await LlmAgentEngine(FakeLlm(reply)).propose_next(_case(), _process(allowed=[UPDATE]))
+    proposals = await LlmAgentEngine(FakeLlm(reply)).propose_next(
+        _case(), _process(allowed=[UPDATE])
+    )
     assert [p.action_uri for p in proposals] == [UPDATE]
 
 

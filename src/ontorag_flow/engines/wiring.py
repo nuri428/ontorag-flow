@@ -9,7 +9,7 @@ original :twin: this module replaces.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from ontorag_flow.config import Settings
 from ontorag_flow.engines.bayesian import SupportsToolCall
@@ -51,9 +51,7 @@ async def maybe_connect_ontorag(
     try:
         await client.connect()
     except OntoragClientError as exc:
-        message = (
-            f"ontorag unreachable; Bayesian/Causal engines disabled: {exc}"
-        )
+        message = f"ontorag unreachable; Bayesian/Causal engines disabled: {exc}"
         if on_error is not None:
             on_error(message)
         else:

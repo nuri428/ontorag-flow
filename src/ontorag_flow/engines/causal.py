@@ -89,9 +89,7 @@ class CausalSimulationEngine:
     def __init__(self, client: SupportsToolCall) -> None:
         self._client = client
 
-    async def propose_next(
-        self, case: Case, process: ProcessDefinition
-    ) -> list[ActionProposal]:
+    async def propose_next(self, case: Case, process: ProcessDefinition) -> list[ActionProposal]:
         """Score every allowed causal candidate and rank best-first."""
 
         if process.causal is None:
@@ -130,9 +128,7 @@ class CausalSimulationEngine:
     ) -> float:
         """Direct one-shot interventional query — used by stacking/arbitration."""
 
-        result = await self._client.call_tool(
-            tool, {"intervention": intervention, "query": target}
-        )
+        result = await self._client.call_tool(tool, {"intervention": intervention, "query": target})
         return extract_posterior(result)
 
     async def counterfactual_replay(
@@ -209,9 +205,7 @@ class StackedEngine:
         self._validator = validator
         self._target = target
 
-    async def propose_next(
-        self, case: Case, process: ProcessDefinition
-    ) -> list[ActionProposal]:
+    async def propose_next(self, case: Case, process: ProcessDefinition) -> list[ActionProposal]:
         proposals = await self._proposer.propose_next(case, process)
         if not proposals:
             return []
@@ -226,9 +220,7 @@ class StackedEngine:
 
         rescored: list[ActionProposal] = []
         for proposal in proposals:
-            posterior = await self._validator.score_intervention(
-                proposal.params, target
-            )
+            posterior = await self._validator.score_intervention(proposal.params, target)
             rescored.append(
                 proposal.model_copy(
                     update={

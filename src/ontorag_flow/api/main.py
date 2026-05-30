@@ -15,8 +15,8 @@ from fastapi import FastAPI
 from ontorag_flow import __version__
 from ontorag_flow.api.routes import actions, audit, cases, health, processes
 from ontorag_flow.config import get_settings
-from ontorag_flow.core.executor import ActionExecutor
 from ontorag_flow.core.case_manager import CaseManager
+from ontorag_flow.core.executor import ActionExecutor
 from ontorag_flow.core.registry import ActionRegistry, default_registry
 from ontorag_flow.engines.selection import EngineResolver
 from ontorag_flow.engines.wiring import build_llm_client, maybe_connect_ontorag
@@ -65,9 +65,7 @@ def create_app(
             llm_client=llm_client,
         )
 
-        executor = ActionExecutor(
-            audit_store=active_store, agent=agent or settings.agent_id
-        )
+        executor = ActionExecutor(audit_store=active_store, agent=agent or settings.agent_id)
         app.state.store = active_store
         app.state.case_manager = CaseManager(
             case_store=active_store,

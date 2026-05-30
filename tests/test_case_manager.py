@@ -85,9 +85,7 @@ async def test_goal_reached_auto_closes_and_locks(
     assert case.status is CaseStatus.CLOSED
 
     with pytest.raises(CaseClosedError):
-        await case_manager_sqlite.execute_action(
-            case.case_uri, UPDATE, {"key": "y", "value": 2}
-        )
+        await case_manager_sqlite.execute_action(case.case_uri, UPDATE, {"key": "y", "value": 2})
 
 
 async def test_action_not_allowed(case_manager_sqlite: CaseManager) -> None:

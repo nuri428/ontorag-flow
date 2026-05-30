@@ -94,9 +94,7 @@ class SqliteStore:
         return ProcessDefinition.model_validate_json(row["data"]) if row else None
 
     async def list_processes(self) -> list[ProcessDefinition]:
-        async with self._conn.execute(
-            "SELECT data FROM processes ORDER BY rowid"
-        ) as cursor:
+        async with self._conn.execute("SELECT data FROM processes ORDER BY rowid") as cursor:
             rows = await cursor.fetchall()
         return [ProcessDefinition.model_validate_json(r["data"]) for r in rows]
 
@@ -184,9 +182,7 @@ class SqliteStore:
         await self._conn.commit()
 
     async def list_all(self) -> list[ProvOActivity]:
-        async with self._conn.execute(
-            "SELECT data FROM activities ORDER BY rowid"
-        ) as cursor:
+        async with self._conn.execute("SELECT data FROM activities ORDER BY rowid") as cursor:
             rows = await cursor.fetchall()
         return [ProvOActivity.model_validate_json(r["data"]) for r in rows]
 

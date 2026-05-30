@@ -124,9 +124,7 @@ async def execute_action(
     """Execute a chosen action against a case and return the new state."""
 
     try:
-        case, outcome = await manager.execute_action(
-            case_uri, body.action_uri, body.params
-        )
+        case, outcome = await manager.execute_action(case_uri, body.action_uri, body.params)
     except (CaseNotFoundError, ProcessNotFoundError, ActionNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (CaseClosedError, ActionNotAllowedError, ConstraintViolationError) as exc:
@@ -134,9 +132,7 @@ async def execute_action(
     except ActionValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return ExecuteActionResponse(
-        case=case, result=outcome.result, activity=outcome.activity
-    )
+    return ExecuteActionResponse(case=case, result=outcome.result, activity=outcome.activity)
 
 
 class CompensateRequest(BaseModel):
@@ -156,9 +152,7 @@ async def compensate_case(
     """Undo a tail of executed actions on a case (saga compensation)."""
 
     try:
-        return await manager.compensate(
-            case_uri, target_activity_uri=body.target_activity_uri
-        )
+        return await manager.compensate(case_uri, target_activity_uri=body.target_activity_uri)
     except CaseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except CompensationError as exc:
@@ -166,9 +160,7 @@ async def compensate_case(
 
 
 @router.post("/{case_uri}/suspend", operation_id="suspend_case", response_model=Case)
-async def suspend_case(
-    case_uri: str, manager: CaseManager = Depends(get_case_manager)
-) -> Case:
+async def suspend_case(case_uri: str, manager: CaseManager = Depends(get_case_manager)) -> Case:
     """Pause an open case."""
 
     try:
@@ -180,9 +172,7 @@ async def suspend_case(
 
 
 @router.post("/{case_uri}/resume", operation_id="resume_case", response_model=Case)
-async def resume_case(
-    case_uri: str, manager: CaseManager = Depends(get_case_manager)
-) -> Case:
+async def resume_case(case_uri: str, manager: CaseManager = Depends(get_case_manager)) -> Case:
     """Reopen a suspended case."""
 
     try:

@@ -26,7 +26,8 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from rdflib import Graph, Literal as RdfLiteral, URIRef
+from rdflib import Graph, URIRef
+from rdflib import Literal as RdfLiteral
 from rdflib.namespace import DCAT, PROV, RDF, XSD
 
 from ontorag_flow.core.action import ProvOActivity
@@ -87,9 +88,7 @@ def activities_to_jsonld(activities: list[ProvOActivity]) -> dict[str, Any]:
         if activity.generated:
             gen_uri = _dataset_uri(activity.activity_uri, "generated")
             node["prov:generated"] = {"@id": gen_uri}
-            graph.append(
-                _dataset_node(activity.activity_uri, "generated", activity.generated)
-            )
+            graph.append(_dataset_node(activity.activity_uri, "generated", activity.generated))
 
         graph.append(node)
 
@@ -101,9 +100,7 @@ def _add_activity_triples(graph: Graph, activity: ProvOActivity) -> None:
 
     subject = URIRef(activity.activity_uri)
     graph.add((subject, RDF.type, PROV.Activity))
-    graph.add(
-        (subject, URIRef(f"{_ONTORAGFLOW}action"), RdfLiteral(activity.action_uri))
-    )
+    graph.add((subject, URIRef(f"{_ONTORAGFLOW}action"), RdfLiteral(activity.action_uri)))
     graph.add(
         (
             subject,
@@ -135,14 +132,10 @@ def _add_activity_triples(graph: Graph, activity: ProvOActivity) -> None:
     if activity.informed_by is not None:
         graph.add((subject, PROV.wasInformedBy, URIRef(activity.informed_by)))
     if activity.error is not None:
-        graph.add(
-            (subject, URIRef(f"{_ONTORAGFLOW}error"), RdfLiteral(activity.error))
-        )
+        graph.add((subject, URIRef(f"{_ONTORAGFLOW}error"), RdfLiteral(activity.error)))
 
     _add_dataset(graph, subject, PROV.used, activity, "used", activity.used)
-    _add_dataset(
-        graph, subject, PROV.generated, activity, "generated", activity.generated
-    )
+    _add_dataset(graph, subject, PROV.generated, activity, "generated", activity.generated)
 
 
 def _add_dataset(

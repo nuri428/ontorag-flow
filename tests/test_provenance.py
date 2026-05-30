@@ -69,8 +69,7 @@ def test_jsonld_promotes_inputs_outputs_to_dcat_datasets() -> None:
     first = next(
         n
         for n in doc["@graph"]
-        if n.get("@type") == "prov:Activity"
-        and n["@id"] == "urn:ontorag-flow:activity:1"
+        if n.get("@type") == "prov:Activity" and n["@id"] == "urn:ontorag-flow:activity:1"
     )
     # The activity references its datasets by @id, not inline mappings.
     assert first["prov:used"] == {"@id": "urn:ontorag-flow:activity:1#used"}

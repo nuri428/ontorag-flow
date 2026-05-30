@@ -57,9 +57,7 @@ async def dashboard(
             raise HTTPException(status_code=400, detail=f"Unknown status: {status}") from exc
 
     cases = await manager.find_cases(status=case_status)
-    return templates.TemplateResponse(
-        request, "dashboard.html", _ctx(cases=cases, status=status)
-    )
+    return templates.TemplateResponse(request, "dashboard.html", _ctx(cases=cases, status=status))
 
 
 @router.get("/actions", response_class=HTMLResponse, include_in_schema=False)
@@ -98,9 +96,7 @@ async def case_detail(
     try:
         proposals = await manager.propose_next(case_uri)
     except (NoEngineConfiguredError, EngineUnavailableError) as exc:
-        proposals_error = (
-            f"Decision engine unavailable: {exc}"
-        )
+        proposals_error = f"Decision engine unavailable: {exc}"
     except CaseManagerError as exc:
         proposals_error = f"{type(exc).__name__}: {exc}"
 

@@ -50,9 +50,7 @@ app.add_typer(process_app, name="process")
 case_app = typer.Typer(help="Create, inspect, and advance cases.", no_args_is_help=True)
 app.add_typer(case_app, name="case")
 
-audit_app = typer.Typer(
-    help="Inspect and export the PROV-O audit trail.", no_args_is_help=True
-)
+audit_app = typer.Typer(help="Inspect and export the PROV-O audit trail.", no_args_is_help=True)
 app.add_typer(audit_app, name="audit")
 
 console = Console()
@@ -67,7 +65,10 @@ def _version_callback(value: bool) -> None:
 @app.callback()
 def main(
     _version: bool = typer.Option(
-        False, "--version", callback=_version_callback, is_eager=True,
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
         help="Show version and exit.",
     ),
 ) -> None:
@@ -87,7 +88,9 @@ def init() -> None:
         console.print("[red].env.example not found in the current directory.[/]")
         raise typer.Exit(code=1)
     shutil.copyfile(example, target)
-    console.print("[green]Created .env from .env.example.[/] Edit it to point at your ontorag MCP server.")
+    console.print(
+        "[green]Created .env from .env.example.[/] Edit it to point at your ontorag MCP server."
+    )
 
 
 @action_app.command("list")
@@ -123,7 +126,10 @@ def action_register(
 def action_run(
     action_uri: str = typer.Argument(..., help="URI of the action to run."),
     param: list[str] = typer.Option(
-        [], "--param", "-p", help="Action parameter as key=value (value parsed as JSON, else string).",
+        [],
+        "--param",
+        "-p",
+        help="Action parameter as key=value (value parsed as JSON, else string).",
     ),
 ) -> None:
     """Validate and execute a single action against an empty case state."""
@@ -237,16 +243,17 @@ def process_list() -> None:
 def case_create(
     process_uri: str = typer.Argument(..., help="Process URI governing the case."),
     initial_state: list[str] = typer.Option(
-        [], "--initial-state", "-s", help="Seed property as key=value (JSON or string).",
+        [],
+        "--initial-state",
+        "-s",
+        help="Seed property as key=value (JSON or string).",
     ),
 ) -> None:
     """Create a new case from a process definition."""
 
     state = _parse_params(initial_state)
     try:
-        case = asyncio.run(
-            _with_manager(lambda m: m.create_case(process_uri, initial_state=state))
-        )
+        case = asyncio.run(_with_manager(lambda m: m.create_case(process_uri, initial_state=state)))
     except CaseManagerError as exc:
         console.print(f"[red]{type(exc).__name__}:[/] {exc}")
         raise typer.Exit(code=1) from exc
@@ -310,7 +317,10 @@ def case_counterfactual(
     swap_activity_uri: str = typer.Option(..., "--swap", help="Activity URI to swap in history."),
     action_uri: str = typer.Option(..., "--action", help="Alternative action URI."),
     param: list[str] = typer.Option(
-        [], "--param", "-p", help="Counterfactual action parameter as key=value (JSON or string).",
+        [],
+        "--param",
+        "-p",
+        help="Counterfactual action parameter as key=value (JSON or string).",
     ),
 ) -> None:
     """Ask 'what if we had taken <action> at <swap> instead?' (requires causal engine)."""
@@ -339,7 +349,9 @@ def case_counterfactual(
 def case_compensate(
     case_uri: str = typer.Argument(..., help="Case URI."),
     target: str | None = typer.Option(
-        None, "--target", help="Activity URI to compensate from (inclusive). Default: undo all.",
+        None,
+        "--target",
+        help="Activity URI to compensate from (inclusive). Default: undo all.",
     ),
 ) -> None:
     """Undo a tail of executed actions on a case (saga compensation)."""
@@ -351,7 +363,9 @@ def case_compensate(
     except CaseManagerError as exc:
         console.print(f"[red]{type(exc).__name__}:[/] {exc}")
         raise typer.Exit(code=1) from exc
-    console.print(f"[green]Compensated.[/] status: {case.status.value}, history: {len(case.history)} event(s)")
+    console.print(
+        f"[green]Compensated.[/] status: {case.status.value}, history: {len(case.history)} event(s)"
+    )
 
 
 @case_app.command("suspend")
@@ -386,9 +400,7 @@ def case_fork(
     """Create a new case copying state and history from one source."""
 
     try:
-        case = asyncio.run(
-            _with_manager(lambda m: m.fork(case_uri, new_uri=new_uri))
-        )
+        case = asyncio.run(_with_manager(lambda m: m.fork(case_uri, new_uri=new_uri)))
     except CaseManagerError as exc:
         console.print(f"[red]{type(exc).__name__}:[/] {exc}")
         raise typer.Exit(code=1) from exc
@@ -400,7 +412,10 @@ def case_execute(
     case_uri: str = typer.Argument(..., help="Case URI."),
     action_uri: str = typer.Argument(..., help="Action URI to execute."),
     param: list[str] = typer.Option(
-        [], "--param", "-p", help="Action parameter as key=value (JSON or string).",
+        [],
+        "--param",
+        "-p",
+        help="Action parameter as key=value (JSON or string).",
     ),
 ) -> None:
     """Execute a chosen action against a case."""

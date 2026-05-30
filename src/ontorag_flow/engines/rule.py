@@ -12,7 +12,8 @@ lt, lte, in, exists``.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -93,9 +94,7 @@ def _match_condition(actual: Any, expected: Any) -> bool:
 
     if isinstance(expected, dict):
         return all(
-            _OPERATORS[op](actual, operand)
-            for op, operand in expected.items()
-            if op in _OPERATORS
+            _OPERATORS[op](actual, operand) for op, operand in expected.items() if op in _OPERATORS
         ) and all(op in _OPERATORS for op in expected)
     return actual == expected
 
@@ -103,10 +102,7 @@ def _match_condition(actual: Any, expected: Any) -> bool:
 def _matches(when: dict[str, Any], properties: dict[str, Any]) -> bool:
     """Whether every condition in ``when`` holds for the given properties."""
 
-    return all(
-        _match_condition(properties.get(key), expected)
-        for key, expected in when.items()
-    )
+    return all(_match_condition(properties.get(key), expected) for key, expected in when.items())
 
 
 class RuleEngine:
@@ -121,9 +117,7 @@ class RuleEngine:
 
         return cls([Rule.model_validate(raw) for raw in process.rules])
 
-    async def propose_next(
-        self, case: Case, process: ProcessDefinition
-    ) -> list[ActionProposal]:
+    async def propose_next(self, case: Case, process: ProcessDefinition) -> list[ActionProposal]:
         """Return proposals for every fired rule, ranked by confidence."""
 
         proposals: list[ActionProposal] = []

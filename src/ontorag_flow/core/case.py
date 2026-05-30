@@ -11,7 +11,7 @@ Cases are immutable: every transition returns a new :class:`Case`.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,7 +19,7 @@ from ontorag_flow.core.action import ProvOActivity, utcnow
 from ontorag_flow.core.state import CaseState
 
 
-class CaseStatus(str, Enum):
+class CaseStatus(StrEnum):
     """Lifecycle states a case can be in."""
 
     OPEN = "open"

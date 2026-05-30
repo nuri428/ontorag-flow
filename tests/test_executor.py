@@ -19,9 +19,7 @@ async def test_execute_applies_state_and_audits(
     audit_store: InMemoryAuditStore,
     update_property: UpdateCaseProperty,
 ) -> None:
-    outcome = await executor.execute(
-        update_property, {"key": "severity", "value": 3}, EMPTY_STATE
-    )
+    outcome = await executor.execute(update_property, {"key": "severity", "value": 3}, EMPTY_STATE)
 
     assert outcome.result.success is True
     assert outcome.state.properties == {"severity": 3}

@@ -10,8 +10,8 @@ the heart of the framework: decision engines *propose* actions, the executor
 from __future__ import annotations
 
 import abc
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, ClassVar, Protocol, runtime_checkable
 from uuid import uuid4
 
@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from ontorag_flow.core.state import CaseState
 
 
-class SideEffectKind(str, Enum):
+class SideEffectKind(StrEnum):
     """The categories of effect an action may declare.
 
     Declaring effects upfront lets the executor, reviewers, and policies reason
@@ -83,9 +83,7 @@ class ProvOActivity(BaseModel):
 
     activity_uri: str = Field(default_factory=_new_activity_uri)
     action_uri: str
-    case_uri: str | None = Field(
-        default=None, description="Case this activity belongs to, if any."
-    )
+    case_uri: str | None = Field(default=None, description="Case this activity belongs to, if any.")
     agent: str | None = Field(default=None, description="prov:wasAssociatedWith")
     started_at: datetime | None = Field(default=None, description="prov:startedAtTime")
     ended_at: datetime | None = Field(default=None, description="prov:endedAtTime")
@@ -228,4 +226,4 @@ class BaseAction(abc.ABC):
 def utcnow() -> datetime:
     """Timezone-aware current UTC time (used for PROV-O timestamps)."""
 
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)

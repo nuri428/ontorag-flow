@@ -65,9 +65,7 @@ class OntoragClient:
 
         ready_waiter = asyncio.ensure_future(self._ready.wait())
         try:
-            await asyncio.wait(
-                {ready_waiter, self._task}, return_when=asyncio.FIRST_COMPLETED
-            )
+            await asyncio.wait({ready_waiter, self._task}, return_when=asyncio.FIRST_COMPLETED)
         finally:
             ready_waiter.cancel()
 
@@ -172,9 +170,7 @@ class OntoragClient:
         detail = _root_cause(cause) if cause is not None else "session task ended"
         self._session = None
         self._task = None
-        raise OntoragClientError(
-            f"ontorag session ended unexpectedly: {detail}"
-        )
+        raise OntoragClientError(f"ontorag session ended unexpectedly: {detail}")
 
 
 def _root_cause(exc: BaseException) -> str:
@@ -198,9 +194,7 @@ def _parse_tool_result(result: Any) -> Any:
         return structured
 
     content = getattr(result, "content", None) or []
-    texts: list[str] = [
-        block.text for block in content if getattr(block, "type", None) == "text"
-    ]
+    texts: list[str] = [block.text for block in content if getattr(block, "type", None) == "text"]
     if not texts:
         return None
     joined = "\n".join(texts)

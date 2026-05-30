@@ -8,7 +8,8 @@ to run next is the job of a decision engine (v0.3+). Here the caller chooses.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from ontorag_flow.core.action import (
@@ -151,9 +152,7 @@ class CaseManager:
         """
 
         if self._engine_factory is None:
-            raise NoEngineConfiguredError(
-                "No decision engine configured for this case manager."
-            )
+            raise NoEngineConfiguredError("No decision engine configured for this case manager.")
 
         case = await self._cases.get_case(case_uri)
         if case is None:
@@ -173,7 +172,7 @@ class CaseManager:
         action_uri: str,
         params: dict[str, Any],
         target: dict[str, Any] | None = None,
-    ) -> "CounterfactualResult":
+    ) -> CounterfactualResult:
         """Replay a case with a swapped action and return the hypothetical outcome.
 
         Routes the call to the case's resolved decision engine; only causal
@@ -207,13 +206,10 @@ class CaseManager:
 
         activity = await self._executor.audit_store.get(swap_activity_uri)
         if activity is None:
-            raise CounterfactualError(
-                f"Unknown swap activity: {swap_activity_uri}."
-            )
+            raise CounterfactualError(f"Unknown swap activity: {swap_activity_uri}.")
         if activity.state_before is None:
             raise CounterfactualError(
-                f"Activity {swap_activity_uri} has no state_before snapshot "
-                "(it predates v0.7)."
+                f"Activity {swap_activity_uri} has no state_before snapshot (it predates v0.7)."
             )
 
         return await replay(
@@ -277,9 +273,7 @@ class CaseManager:
         if case is None:
             raise CaseNotFoundError(case_uri)
         if case.status is not CaseStatus.OPEN:
-            raise CaseClosedError(
-                f"Case {case_uri} is {case.status.value}, not open."
-            )
+            raise CaseClosedError(f"Case {case_uri} is {case.status.value}, not open.")
 
         process = await self._processes.get_process(case.process_uri)
         if process is None:
@@ -312,9 +306,7 @@ class CaseManager:
 
     # --- saga compensation -------------------------------------------------
 
-    async def compensate(
-        self, case_uri: str, *, target_activity_uri: str | None = None
-    ) -> Case:
+    async def compensate(self, case_uri: str, *, target_activity_uri: str | None = None) -> Case:
         """Undo a contiguous tail of executed actions on a case.
 
         For each undone activity (most-recent first) the action's ``compensate``
@@ -350,9 +342,7 @@ class CaseManager:
         undone = case.history[undo_start:]
 
         if any(event.action_uri == COMPENSATION_ACTION_URI for event in undone):
-            raise CompensationError(
-                "Cannot compensate across a previous compensation event."
-            )
+            raise CompensationError("Cannot compensate across a previous compensation event.")
 
         audit_store = self._executor.audit_store
         first_undone_activity = await audit_store.get(undone[0].activity_uri)
@@ -415,14 +405,10 @@ class CaseManager:
             }
         )
         await self._cases.update_case(new_case)
-        logger.info(
-            "Compensated %d activities on case %s.", len(undone), case_uri
-        )
+        logger.info("Compensated %d activities on case %s.", len(undone), case_uri)
         return new_case
 
-    def _find_undo_start(
-        self, case: Case, target_activity_uri: str | None
-    ) -> int:
+    def _find_undo_start(self, case: Case, target_activity_uri: str | None) -> int:
         if target_activity_uri is None:
             return 0
         for index, event in enumerate(case.history):
@@ -431,7 +417,6 @@ class CaseManager:
         raise CompensationError(
             f"Activity {target_activity_uri} is not in case {case.case_uri}'s history."
         )
-
 
     # --- lifecycle: suspend / resume / fork --------------------------------
 

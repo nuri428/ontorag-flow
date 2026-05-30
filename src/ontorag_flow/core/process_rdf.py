@@ -52,14 +52,16 @@ def process_to_rdf(process: ProcessDefinition) -> str:
         graph.add((subject, OF.goalJson, Literal(json.dumps(process.goal, sort_keys=True))))
     if process.initial_state:
         graph.add(
-            (subject, OF.initialStateJson, Literal(json.dumps(process.initial_state, sort_keys=True)))
+            (
+                subject,
+                OF.initialStateJson,
+                Literal(json.dumps(process.initial_state, sort_keys=True)),
+            )
         )
     if process.rules:
         graph.add((subject, OF.rulesJson, Literal(json.dumps(process.rules, sort_keys=True))))
     if process.bayesian is not None:
-        graph.add(
-            (subject, OF.bayesianJson, Literal(json.dumps(process.bayesian, sort_keys=True)))
-        )
+        graph.add((subject, OF.bayesianJson, Literal(json.dumps(process.bayesian, sort_keys=True))))
 
     return graph.serialize(format="turtle")
 
@@ -120,6 +122,4 @@ def _json_literal(graph: Graph, subject: URIRef, predicate: URIRef) -> Any:
     try:
         return json.loads(str(value))
     except json.JSONDecodeError as exc:
-        raise ProcessParseError(
-            f"Malformed JSON literal for {predicate}: {value!r}"
-        ) from exc
+        raise ProcessParseError(f"Malformed JSON literal for {predicate}: {value!r}") from exc

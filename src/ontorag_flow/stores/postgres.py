@@ -67,9 +67,7 @@ class PostgresStore:
         try:
             import asyncpg
         except ImportError as exc:  # pragma: no cover - requires the `postgres` extra
-            raise RuntimeError(
-                "asyncpg is not installed; install the 'postgres' extra."
-            ) from exc
+            raise RuntimeError("asyncpg is not installed; install the 'postgres' extra.") from exc
 
         self._conn = await asyncpg.connect(self._dsn)
         for statement in _SCHEMA_STATEMENTS:
@@ -108,9 +106,7 @@ class PostgresStore:
         )
 
     async def get_process(self, process_uri: str) -> ProcessDefinition | None:
-        row = await self._c.fetchrow(
-            "SELECT data FROM processes WHERE uri = $1", process_uri
-        )
+        row = await self._c.fetchrow("SELECT data FROM processes WHERE uri = $1", process_uri)
         return ProcessDefinition.model_validate_json(row["data"]) if row else None
 
     async def list_processes(self) -> list[ProcessDefinition]:
@@ -203,7 +199,5 @@ class PostgresStore:
         return [ProvOActivity.model_validate_json(r["data"]) for r in rows]
 
     async def get(self, activity_uri: str) -> ProvOActivity | None:
-        row = await self._c.fetchrow(
-            "SELECT data FROM activities WHERE uri = $1", activity_uri
-        )
+        row = await self._c.fetchrow("SELECT data FROM activities WHERE uri = $1", activity_uri)
         return ProvOActivity.model_validate_json(row["data"]) if row else None

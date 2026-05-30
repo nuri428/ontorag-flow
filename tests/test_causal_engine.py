@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case
 from ontorag_flow.core.process import ProcessDefinition
@@ -24,7 +22,9 @@ class FakeOntorag:
     """Returns a canned posterior per tool name (or per intervention key)."""
 
     def __init__(
-        self, *, posteriors: dict[str, float] | None = None,
+        self,
+        *,
+        posteriors: dict[str, float] | None = None,
         per_intervention: dict[str, float] | None = None,
     ) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -59,9 +59,7 @@ def _process(causal=None, allowed=None, goal=None) -> ProcessDefinition:  # type
 
 
 def _case(properties: dict[str, Any] | None = None) -> Case:
-    return Case(
-        case_uri="urn:c", process_uri="urn:p", state=CaseState(properties=properties or {})
-    )
+    return Case(case_uri="urn:c", process_uri="urn:p", state=CaseState(properties=properties or {}))
 
 
 # --- propose_next ----------------------------------------------------------
@@ -106,9 +104,7 @@ async def test_propose_skips_disallowed_actions() -> None:
 
 async def test_score_intervention_direct_call() -> None:
     client = FakeOntorag(per_intervention={"tx=A": 0.7})
-    posterior = await CausalSimulationEngine(client).score_intervention(
-        {"tx": "A"}, {"goal": True}
-    )
+    posterior = await CausalSimulationEngine(client).score_intervention({"tx": "A"}, {"goal": True})
     assert posterior == 0.7
     assert client.calls[-1][0] == "do_query"
 
@@ -147,8 +143,12 @@ class FakeProposer:
 async def test_stacked_engine_rescore_via_causal_validator() -> None:
     proposer = FakeProposer(
         [
-            ActionProposal(action_uri=UPDATE, params={"tx": "A"}, confidence=0.9, proposed_by="LlmAgentEngine"),
-            ActionProposal(action_uri=UPDATE, params={"tx": "B"}, confidence=0.6, proposed_by="LlmAgentEngine"),
+            ActionProposal(
+                action_uri=UPDATE, params={"tx": "A"}, confidence=0.9, proposed_by="LlmAgentEngine"
+            ),
+            ActionProposal(
+                action_uri=UPDATE, params={"tx": "B"}, confidence=0.6, proposed_by="LlmAgentEngine"
+            ),
         ]
     )
     client = FakeOntorag(per_intervention={"tx=A": 0.2, "tx=B": 0.95})

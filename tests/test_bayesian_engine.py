@@ -45,9 +45,7 @@ def _process(
 
 
 def _case(properties: dict[str, Any]) -> Case:
-    return Case(
-        case_uri="urn:c", process_uri="urn:p", state=CaseState(properties=properties)
-    )
+    return Case(case_uri="urn:c", process_uri="urn:p", state=CaseState(properties=properties))
 
 
 def _bayesian(candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -61,8 +59,16 @@ def _bayesian(candidates: list[dict[str, Any]]) -> dict[str, Any]:
 async def test_propose_ranks_candidates_by_posterior_descending() -> None:
     bayesian = _bayesian(
         [
-            {"action": UPDATE, "params": {"key": "t", "value": "low"}, "evidence": {"severity": "low"}},
-            {"action": UPDATE, "params": {"key": "t", "value": "high"}, "evidence": {"severity": "high"}},
+            {
+                "action": UPDATE,
+                "params": {"key": "t", "value": "low"},
+                "evidence": {"severity": "low"},
+            },
+            {
+                "action": UPDATE,
+                "params": {"key": "t", "value": "high"},
+                "evidence": {"severity": "high"},
+            },
         ]
     )
     process = _process(bayesian)
@@ -103,9 +109,7 @@ async def test_disallowed_candidate_action_is_skipped() -> None:
 
 
 async def test_base_evidence_merges_case_properties() -> None:
-    bayesian = _bayesian(
-        [{"action": UPDATE, "evidence": {"severity": "high"}}]
-    )
+    bayesian = _bayesian([{"action": UPDATE, "evidence": {"severity": "high"}}])
     process = _process(bayesian)
     client = FakeClient({"high": 0.7})
 
@@ -119,9 +123,7 @@ async def test_base_evidence_merges_case_properties() -> None:
 
 async def test_params_propagate_to_proposal() -> None:
     params = {"key": "triage_level", "value": "urgent"}
-    bayesian = _bayesian(
-        [{"action": UPDATE, "params": params, "evidence": {"severity": "high"}}]
-    )
+    bayesian = _bayesian([{"action": UPDATE, "params": params, "evidence": {"severity": "high"}}])
     process = _process(bayesian)
     client = FakeClient({"high": 0.8})
 

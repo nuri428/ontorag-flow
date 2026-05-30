@@ -72,8 +72,7 @@ class EngineResolver:
             kind = process.engine.lower()
             if kind not in _VALID_KINDS:
                 raise EngineUnavailableError(
-                    f"Unknown engine {process.engine!r}; expected one of "
-                    f"{sorted(_VALID_KINDS)}."
+                    f"Unknown engine {process.engine!r}; expected one of {sorted(_VALID_KINDS)}."
                 )
             return kind
         if process.causal is not None:

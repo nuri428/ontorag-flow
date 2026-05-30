@@ -24,9 +24,7 @@ async def test_process_roundtrip(sqlite_store: SqliteStore) -> None:
 
 
 async def test_case_roundtrip_and_find(sqlite_store: SqliteStore) -> None:
-    case = Case(
-        case_uri="urn:c:1", process_uri="urn:p:1", state=CaseState(case_uri="urn:c:1")
-    )
+    case = Case(case_uri="urn:c:1", process_uri="urn:p:1", state=CaseState(case_uri="urn:c:1"))
     await sqlite_store.create_case(case)
 
     loaded = await sqlite_store.get_case("urn:c:1")

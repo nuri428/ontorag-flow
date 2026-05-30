@@ -25,9 +25,7 @@ class UpdateCaseProperty(BaseAction):
     uri: ClassVar[str] = "urn:ontorag-flow:action:UpdateCaseProperty"
     name: ClassVar[str] = "Update Case Property"
     description: ClassVar[str] = "Set a key/value property on the case state."
-    side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset(
-        {SideEffectKind.CASE_STATE}
-    )
+    side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset({SideEffectKind.CASE_STATE})
 
     class Params(BaseModel):
         key: str = Field(min_length=1, description="Property name to set.")
@@ -50,9 +48,7 @@ class SetGoal(BaseAction):
     uri: ClassVar[str] = "urn:ontorag-flow:action:SetGoal"
     name: ClassVar[str] = "Set Goal"
     description: ClassVar[str] = "Set the case goal predicate, e.g. diagnosed=true."
-    side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset(
-        {SideEffectKind.CASE_STATE}
-    )
+    side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset({SideEffectKind.CASE_STATE})
 
     class Params(BaseModel):
         predicate: str = Field(min_length=1, description="Goal predicate name.")

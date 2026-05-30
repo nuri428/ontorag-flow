@@ -98,8 +98,7 @@ async def run() -> None:
             ttl_path = Path(workdir) / "audit.ttl"
             ttl_path.write_text(render(activities, "ttl"), encoding="utf-8")
             console.print(
-                f"\nPROV-O Turtle export: {ttl_path.stat().st_size} bytes "
-                f"(first 4 lines):"
+                f"\nPROV-O Turtle export: {ttl_path.stat().st_size} bytes (first 4 lines):"
             )
             for line in ttl_path.read_text(encoding="utf-8").splitlines()[:4]:
                 console.print(f"  {line}")

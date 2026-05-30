@@ -47,7 +47,7 @@ async def test_compensate_restores_state_and_reopens(
     compensated = await manager.compensate(case.case_uri)
 
     assert compensated.status is CaseStatus.OPEN  # reopened
-    assert compensated.state.properties == {}     # back to creation state
+    assert compensated.state.properties == {}  # back to creation state
     # history is replaced by a single compensation event:
     assert len(compensated.history) == 1
     assert compensated.history[0].action_uri.endswith(":_Compensate")
@@ -201,9 +201,7 @@ async def test_human_engine_proposes_request_human_review() -> None:
 async def test_executing_human_action_auto_suspends_case(
     case_manager_sqlite: CaseManager,
 ) -> None:
-    process = ProcessDefinition(
-        process_uri="urn:p:h", name="H", allowed_actions=[HUMAN]
-    )
+    process = ProcessDefinition(process_uri="urn:p:h", name="H", allowed_actions=[HUMAN])
     await case_manager_sqlite.register_process(process)
     case = await case_manager_sqlite.create_case("urn:p:h")
 

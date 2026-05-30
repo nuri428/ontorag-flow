@@ -70,13 +70,9 @@ class ActionExecutor:
         try:
             return action.input_schema.model_validate(raw_params)
         except PydanticValidationError as exc:
-            raise ActionValidationError(
-                f"Invalid params for {action.uri}: {exc.errors()}"
-            ) from exc
+            raise ActionValidationError(f"Invalid params for {action.uri}: {exc.errors()}") from exc
 
-    async def validate(
-        self, action: Action, raw_params: dict[str, Any], state: CaseState
-    ) -> bool:
+    async def validate(self, action: Action, raw_params: dict[str, Any], state: CaseState) -> bool:
         """Schema-validate params and run the action's precondition check."""
 
         params = self.coerce_params(action, raw_params)
@@ -111,18 +107,14 @@ class ActionExecutor:
         params = self.coerce_params(action, raw_params)
 
         if not await action.validate(params, state):
-            raise ActionValidationError(
-                f"Precondition failed for {action.uri}"
-            )
+            raise ActionValidationError(f"Precondition failed for {action.uri}")
 
         started_at = utcnow()
         try:
             result = await action.execute(params, state)
         except Exception as exc:  # noqa: BLE001 — failed attempts must be audited
             logger.exception("Action %s failed during execute", action.uri)
-            result = ActionResult(
-                action_uri=action.uri, success=False, error=str(exc)
-            )
+            result = ActionResult(action_uri=action.uri, success=False, error=str(exc))
             new_state = state
         else:
             new_state = state.apply(result)

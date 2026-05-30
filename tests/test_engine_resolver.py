@@ -28,9 +28,7 @@ class FakeLlm:
 
 
 def _proc(**kw: Any) -> ProcessDefinition:
-    return ProcessDefinition(
-        process_uri="urn:p", name="P", allowed_actions=[UPDATE], **kw
-    )
+    return ProcessDefinition(process_uri="urn:p", name="P", allowed_actions=[UPDATE], **kw)
 
 
 def test_explicit_engine_overrides_inference() -> None:

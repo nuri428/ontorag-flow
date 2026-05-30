@@ -23,9 +23,7 @@ def _process(rules: list[dict[str, Any]], allowed: list[str] | None = None) -> P
 
 
 def _case(properties: dict[str, Any]) -> Case:
-    return Case(
-        case_uri="urn:c", process_uri="urn:p", state=CaseState(properties=properties)
-    )
+    return Case(case_uri="urn:c", process_uri="urn:p", state=CaseState(properties=properties))
 
 
 def test_matches_scalar_equality() -> None:
@@ -46,7 +44,12 @@ def test_matches_operators() -> None:
 
 async def test_propose_fires_matching_rules_ranked() -> None:
     rules = [
-        {"name": "low", "when": {"a": 1}, "then": {"action": UPDATE, "params": {"k": "v"}}, "confidence": 0.5},
+        {
+            "name": "low",
+            "when": {"a": 1},
+            "then": {"action": UPDATE, "params": {"k": "v"}},
+            "confidence": 0.5,
+        },
         {"name": "high", "when": {"a": 1}, "then": {"action": UPDATE}, "confidence": 0.9},
         {"name": "nomatch", "when": {"a": 2}, "then": {"action": UPDATE}, "confidence": 1.0},
     ]

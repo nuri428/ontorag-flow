@@ -19,9 +19,7 @@ __all__ = ["HumanReviewEngine"]
 class HumanReviewEngine:
     """Proposes a single 'request human review' action with full confidence."""
 
-    async def propose_next(
-        self, case: Case, process: ProcessDefinition
-    ) -> list[ActionProposal]:
+    async def propose_next(self, case: Case, process: ProcessDefinition) -> list[ActionProposal]:
         return [
             ActionProposal(
                 action_uri=RequestHumanReview.uri,

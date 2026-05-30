@@ -50,9 +50,7 @@ async def test_call_tool_parses_and_wraps_errors() -> None:
     payload = await find_entities(client, "x", limit=5)
 
     assert payload == {"entities": ["urn:x"]}
-    session.call_tool.assert_awaited_once_with(
-        "find_entities", {"query": "x", "limit": 5}
-    )
+    session.call_tool.assert_awaited_once_with("find_entities", {"query": "x", "limit": 5})
 
 
 async def test_call_tool_raises_on_tool_error() -> None:

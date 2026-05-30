@@ -38,7 +38,12 @@ from pydantic import BaseModel, Field
 from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case
 from ontorag_flow.core.process import ProcessDefinition
+from ontorag_flow.engines._posteriors import extract_posterior as _extract_posterior
 from ontorag_flow.log import get_logger
+
+# Re-exported above for backward compatibility; the canonical helper now lives
+# in ``engines/_posteriors.py`` so the Causal engine can share it without a
+# cycle.
 
 logger = get_logger(__name__)
 
@@ -80,12 +85,6 @@ class BayesianConfig(BaseModel):
     candidates: list[BayesianCandidate] = Field(default_factory=list)
 
 
-from ontorag_flow.engines._posteriors import extract_posterior as _extract_posterior
-
-# Re-exported for backward compatibility; the canonical helper now lives in
-# ``engines/_posteriors.py`` so the Causal engine can share it without a cycle.
-
-
 class BayesianMpeEngine:
     """Scores candidate actions by the posterior they confer on a target.
 
@@ -104,9 +103,7 @@ class BayesianMpeEngine:
 
         self._client = client
 
-    async def propose_next(
-        self, case: Case, process: ProcessDefinition
-    ) -> list[ActionProposal]:
+    async def propose_next(self, case: Case, process: ProcessDefinition) -> list[ActionProposal]:
         """Score every allowed candidate and return proposals ranked best-first.
 
         For each configured candidate whose action the process allows, the engine

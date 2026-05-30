@@ -96,9 +96,7 @@ def load_process(path: str | Path) -> ProcessDefinition:
         raise ProcessParseError(f"Invalid YAML in {file_path}: {exc}") from exc
 
     if not isinstance(raw, dict):
-        raise ProcessParseError(
-            f"Process file {file_path} must contain a YAML mapping."
-        )
+        raise ProcessParseError(f"Process file {file_path} must contain a YAML mapping.")
 
     try:
         return ProcessDefinition.model_validate(raw)

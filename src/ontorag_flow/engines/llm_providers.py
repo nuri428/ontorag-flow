@@ -37,9 +37,7 @@ class AnthropicClient:
         try:
             from anthropic import AsyncAnthropic
         except ImportError as exc:  # pragma: no cover - requires the `llm` extra
-            raise RuntimeError(
-                "anthropic is not installed; install the 'llm' extra."
-            ) from exc
+            raise RuntimeError("anthropic is not installed; install the 'llm' extra.") from exc
 
         client = AsyncAnthropic(api_key=self._api_key, timeout=_DEFAULT_TIMEOUT_SECONDS)
         message = await client.messages.create(
@@ -64,9 +62,7 @@ class OpenAIClient:
         try:
             from openai import AsyncOpenAI
         except ImportError as exc:  # pragma: no cover - requires the `llm` extra
-            raise RuntimeError(
-                "openai is not installed; install the 'llm' extra."
-            ) from exc
+            raise RuntimeError("openai is not installed; install the 'llm' extra.") from exc
 
         client = AsyncOpenAI(api_key=self._api_key, timeout=_DEFAULT_TIMEOUT_SECONDS)
         response = await client.chat.completions.create(
@@ -82,9 +78,7 @@ class OpenAIClient:
 class OllamaClient:
     """:class:`LlmClient` over a local Ollama server's REST API (no SDK)."""
 
-    def __init__(
-        self, model: str = "llama3.1", *, host: str = "http://localhost:11434"
-    ) -> None:
+    def __init__(self, model: str = "llama3.1", *, host: str = "http://localhost:11434") -> None:
         self._model = model
         self._host = host.rstrip("/")
 

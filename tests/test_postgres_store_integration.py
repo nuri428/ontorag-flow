@@ -71,9 +71,7 @@ pytestmark = pytest.mark.skipif(
 @pytest_asyncio.fixture
 async def pg_store() -> AsyncIterator[PostgresStore]:
     with PostgresContainer("postgres:16-alpine") as container:
-        dsn = container.get_connection_url().replace(
-            "postgresql+psycopg2://", "postgresql://"
-        )
+        dsn = container.get_connection_url().replace("postgresql+psycopg2://", "postgresql://")
         store = PostgresStore(dsn)
         await store.connect()
         try:
@@ -83,9 +81,7 @@ async def pg_store() -> AsyncIterator[PostgresStore]:
 
 
 async def test_process_and_case_roundtrip_live(pg_store: PostgresStore) -> None:
-    proc = ProcessDefinition(
-        process_uri="urn:p:live", name="Live", allowed_actions=["urn:a:1"]
-    )
+    proc = ProcessDefinition(process_uri="urn:p:live", name="Live", allowed_actions=["urn:a:1"])
     await pg_store.save_process(proc)
     assert await pg_store.get_process("urn:p:live") == proc
 
