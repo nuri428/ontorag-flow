@@ -112,3 +112,88 @@ def test_dashboard_status_filter(client: TestClient) -> None:
 
 def test_case_detail_404_for_unknown(client: TestClient) -> None:
     assert client.get("/ui/cases/urn:nope").status_code == 404
+
+
+# --- mutating UI form POSTs (303 redirect pattern, JS-free) ---------------
+
+
+def _open_case(client: TestClient) -> str:
+    client.post("/processes", json=PROCESS)
+    return client.post("/cases", json={"process_uri": "urn:p:ui"}).json()["case_uri"]
+
+
+def test_ui_suspend_then_resume_round_trip(client: TestClient) -> None:
+    case_uri = _open_case(client)
+
+    suspended = client.post(f"/ui/cases/{case_uri}/suspend", follow_redirects=False)
+    assert suspended.status_code == 303
+    assert suspended.headers["location"] == f"/ui/cases/{case_uri}"
+    assert client.get(f"/cases/{case_uri}").json()["status"] == "suspended"
+
+    resumed = client.post(f"/ui/cases/{case_uri}/resume", follow_redirects=False)
+    assert resumed.status_code == 303
+    assert client.get(f"/cases/{case_uri}").json()["status"] == "open"
+
+
+def test_ui_invalid_transition_redirects_with_error_query(client: TestClient) -> None:
+    case_uri = _open_case(client)
+    # Resuming an open case is invalid.
+    resp = client.post(f"/ui/cases/{case_uri}/resume", follow_redirects=False)
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+
+
+def test_ui_compensate_undoes_actions(client: TestClient) -> None:
+    case_uri = _open_case(client)
+    client.post(
+        f"/cases/{case_uri}/execute",
+        json={"action_uri": UPDATE, "params": {"key": "a", "value": 1}},
+    )
+
+    resp = client.post(f"/ui/cases/{case_uri}/compensate", follow_redirects=False)
+    assert resp.status_code == 303
+    body = client.get(f"/cases/{case_uri}").json()
+    assert body["status"] == "open"
+    # The UPDATE we executed is undone; the case reverts to PROCESS.initial_state.
+    assert body["state"]["properties"] == {"triage_level": "unknown"}
+    assert "a" not in body["state"]["properties"]
+
+
+def test_ui_execute_top_runs_first_proposal(client: TestClient) -> None:
+    case_uri = _open_case(client)
+
+    resp = client.post(f"/ui/cases/{case_uri}/execute-top", follow_redirects=False)
+    assert resp.status_code == 303
+    state = client.get(f"/cases/{case_uri}").json()["state"]["properties"]
+    # The PROCESS fixture's rule recommends triage_level=assessed for fresh cases.
+    assert state.get("triage_level") == "assessed"
+
+
+def test_ui_subcase_form_redirects_to_child(client: TestClient) -> None:
+    parent_uri = _open_case(client)
+
+    resp = client.post(
+        f"/ui/cases/{parent_uri}/subcase",
+        data={"process_uri": "urn:p:ui"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    child_uri = resp.headers["location"].rsplit("/", 1)[-1]
+    assert child_uri != parent_uri
+    assert client.get(f"/cases/{child_uri}").json()["parent_uri"] == parent_uri
+
+
+def test_case_detail_renders_action_buttons_per_status(client: TestClient) -> None:
+    case_uri = _open_case(client)
+
+    body = client.get(f"/ui/cases/{case_uri}").text
+    assert 'action="/ui/cases/' in body and "/suspend" in body
+    assert "Execute top proposal" in body
+    # No "Resume" button while the case is open.
+    assert "/resume" not in body
+
+    client.post(f"/ui/cases/{case_uri}/suspend")
+    suspended_body = client.get(f"/ui/cases/{case_uri}").text
+    assert "/resume" in suspended_body
+    # No suspend button while suspended.
+    assert ">Suspend</button>" not in suspended_body

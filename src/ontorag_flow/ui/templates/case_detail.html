@@ -3,12 +3,47 @@
 {% block content %}
 <h1>Case <code class="uri">{{ case.case_uri }}</code></h1>
 
+{% if error %}
+<div class="callout error">{{ error }}</div>
+{% endif %}
+
 <dl class="kv">
   <dt>Process</dt><dd class="uri">{{ case.process_uri }}</dd>
   <dt>Status</dt><dd><span class="badge {{ case.status.value }}">{{ case.status.value }}</span></dd>
   <dt>Created</dt><dd>{{ case.created_at.isoformat() }}</dd>
   <dt>Updated</dt><dd>{{ case.updated_at.isoformat() }}</dd>
+  {% if parent %}
+  <dt>Parent</dt><dd class="uri"><a href="/ui/cases/{{ parent.case_uri }}">{{ parent.case_uri }}</a></dd>
+  {% endif %}
 </dl>
+
+<h2>Actions</h2>
+<div class="actions-bar">
+  {% if case.status.value == 'open' %}
+    <form method="post" action="/ui/cases/{{ case.case_uri }}/suspend"><button class="btn">Suspend</button></form>
+    {% if proposals %}
+      <form method="post" action="/ui/cases/{{ case.case_uri }}/execute-top">
+        <button class="btn primary">Execute top proposal</button>
+      </form>
+    {% endif %}
+  {% elif case.status.value == 'suspended' %}
+    <form method="post" action="/ui/cases/{{ case.case_uri }}/resume"><button class="btn primary">Resume</button></form>
+  {% endif %}
+  {% if case.history %}
+    <form method="post" action="/ui/cases/{{ case.case_uri }}/compensate">
+      <button class="btn danger">Compensate (undo all)</button>
+    </form>
+  {% endif %}
+  <form method="post" action="/ui/cases/{{ case.case_uri }}/subcase" class="inline-form">
+    <select name="process_uri" required>
+      <option value="">Spawn subcase…</option>
+      {% for process in processes %}
+        <option value="{{ process.process_uri }}">{{ process.name }} ({{ process.process_uri }})</option>
+      {% endfor %}
+    </select>
+    <button class="btn">Spawn</button>
+  </form>
+</div>
 
 <h2>State</h2>
 <pre>properties: {{ case.state.properties | tojson(indent=2) }}
@@ -35,6 +70,23 @@ goal:       {{ case.state.goal | tojson(indent=2) if case.state.goal else 'null'
       <td><code>{{ proposal.params | tojson }}</code></td>
       <td>{{ proposal.rationale or '—' }}</td>
       <td><span class="badge">{{ proposal.proposed_by or '—' }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if subcases %}
+<h2>Subcases ({{ subcases | length }})</h2>
+<table>
+  <thead><tr><th>Case</th><th>Process</th><th>Status</th><th>Properties</th></tr></thead>
+  <tbody>
+  {% for child in subcases %}
+    <tr>
+      <td class="uri"><a href="/ui/cases/{{ child.case_uri }}">{{ child.case_uri }}</a></td>
+      <td class="uri">{{ child.process_uri }}</td>
+      <td><span class="badge {{ child.status.value }}">{{ child.status.value }}</span></td>
+      <td><code>{{ child.state.properties | tojson }}</code></td>
     </tr>
   {% endfor %}
   </tbody>

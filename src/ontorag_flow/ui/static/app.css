@@ -128,3 +128,29 @@ footer { color: var(--muted); padding: 1.5rem; text-align: center; font-size: 0.
   margin-right: 0.4rem;
 }
 .confidence-bar > span { display: block; height: 100%; background: var(--accent); }
+
+.actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0 1rem;
+}
+.actions-bar form { margin: 0; }
+.actions-bar .inline-form { display: inline-flex; gap: 0.3rem; align-items: center; }
+.actions-bar select { padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 4px; }
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0.35rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.btn:hover { background: var(--soft); }
+.btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+.btn.primary:hover { background: #0858be; }
+.btn.danger { background: var(--bg); color: var(--bad); border-color: var(--bad); }
+.btn.danger:hover { background: #fff0ef; }

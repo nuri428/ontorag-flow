@@ -143,6 +143,12 @@ class CaseManager:
         cases = await self._cases.find_cases(status=status, process_uri=process_uri)
         return [await self._hydrate_history(case) for case in cases]
 
+    async def find_subcases(self, parent_uri: str) -> list[Case]:
+        """Return every case whose parent_uri matches (subprocess children)."""
+
+        all_cases = await self._cases.find_cases()
+        return [await self._hydrate_history(c) for c in all_cases if c.parent_uri == parent_uri]
+
     async def _hydrate_history(self, case: Case) -> Case:
         """Rebuild ``case.history`` from the authoritative audit log (P5)."""
 

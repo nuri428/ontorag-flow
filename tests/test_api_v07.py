@@ -60,13 +60,9 @@ def test_compensate_endpoint_undoes_actions(client: TestClient) -> None:
 
 def test_subcase_endpoint_links_child_to_parent(client: TestClient) -> None:
     client.post("/processes", json=PROCESS)
-    parent_uri = client.post("/cases", json={"process_uri": "urn:p:lifecycle"}).json()[
-        "case_uri"
-    ]
+    parent_uri = client.post("/cases", json={"process_uri": "urn:p:lifecycle"}).json()["case_uri"]
 
-    resp = client.post(
-        f"/cases/{parent_uri}/subcase", json={"process_uri": "urn:p:lifecycle"}
-    )
+    resp = client.post(f"/cases/{parent_uri}/subcase", json={"process_uri": "urn:p:lifecycle"})
     assert resp.status_code == 200
     child = resp.json()
     assert child["parent_uri"] == parent_uri
