@@ -122,3 +122,62 @@ def test_make_llm_client_dispatch() -> None:
 def test_make_llm_client_unknown_provider() -> None:
     with pytest.raises(ValueError):
         make_llm_client("bedrock")
+
+
+# --- pure helpers: _extract_json_array and _clamp_confidence ------------
+
+
+def test_clamp_confidence_rejects_bool_and_non_numeric() -> None:
+    from ontorag_flow.engines.llm_agent import _clamp_confidence
+
+    assert _clamp_confidence(True) is None  # bool is the trap (subclass of int)
+    assert _clamp_confidence("0.5") is None
+    assert _clamp_confidence(None) is None
+
+
+def test_clamp_confidence_clamps_to_unit_interval() -> None:
+    from ontorag_flow.engines.llm_agent import _clamp_confidence
+
+    assert _clamp_confidence(-0.4) == 0.0
+    assert _clamp_confidence(1.7) == 1.0
+    assert _clamp_confidence(0.42) == 0.42
+
+
+def test_extract_json_array_handles_fenced_object_with_proposals() -> None:
+    """LLM wraps the array in a ```json fenced object with a "proposals" key."""
+
+    from ontorag_flow.engines.llm_agent import _extract_json_array
+
+    raw = '```json\n{"proposals": [{"action_uri": "u"}]}\n```'
+    assert _extract_json_array(raw) == [{"action_uri": "u"}]
+
+
+def test_extract_json_array_recovers_bracketed_array_from_prose() -> None:
+    """First JSON parse fails (extra prose); falls back to [...] substring scan."""
+
+    from ontorag_flow.engines.llm_agent import _extract_json_array
+
+    raw = 'Sure! Here are my picks: [{"action_uri": "u"}] hope that helps.'
+    assert _extract_json_array(raw) == [{"action_uri": "u"}]
+
+
+def test_extract_json_array_returns_none_when_substring_also_unparseable() -> None:
+    from ontorag_flow.engines.llm_agent import _extract_json_array
+
+    # Has brackets but the inside is garbage.
+    assert _extract_json_array("prose [not, valid, json[[]] more") is None
+
+
+def test_extract_json_array_returns_none_when_no_array_anywhere() -> None:
+    from ontorag_flow.engines.llm_agent import _extract_json_array
+
+    assert _extract_json_array("no arrays here") is None
+
+
+def test_extract_json_array_returns_none_for_scalar_top_level() -> None:
+    """Parses, but the top level is neither a list nor an object-with-proposals."""
+
+    from ontorag_flow.engines.llm_agent import _extract_json_array
+
+    assert _extract_json_array('"a string"') is None
+    assert _extract_json_array("42") is None
