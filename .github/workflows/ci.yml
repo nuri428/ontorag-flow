@@ -130,7 +130,9 @@ jobs:
         run: docker pull postgres:16-alpine
 
       - name: Run live Postgres integration tests
-        run: uv run pytest tests/test_postgres_store_integration.py -v
+        # Run only the integration file; disable coverage because the floor
+        # is set for the full suite (the test job enforces it).
+        run: uv run pytest tests/test_postgres_store_integration.py -v --no-cov
 
   demo:
     name: Reference demo smoke

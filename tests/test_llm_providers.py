@@ -12,7 +12,13 @@ from typing import Any
 
 import pytest
 
-from ontorag_flow.engines.llm_providers import (
+# The Anthropic / OpenAI SDKs ship in the optional ``llm`` extra. CI's lint /
+# test job installs ``dev`` only — skip the whole module rather than fail
+# collection. The ``typecheck`` and ``demo`` paths use --all-extras / --llm.
+pytest.importorskip("anthropic", reason="install the 'llm' extra to exercise LLM providers")
+pytest.importorskip("openai", reason="install the 'llm' extra to exercise LLM providers")
+
+from ontorag_flow.engines.llm_providers import (  # noqa: E402 — must come after importorskip
     AnthropicClient,
     OllamaClient,
     OpenAIClient,

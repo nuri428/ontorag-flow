@@ -37,6 +37,14 @@ testcontainers = pytest.importorskip(
     "testcontainers.postgres",
     reason="install the 'postgres' extra to run live Postgres integration tests",
 )
+# asyncpg is the actual driver PostgresStore uses; without it the store's
+# connect() raises RuntimeError at test setup. testcontainers comes with the
+# dev extra so the check above passes even when 'postgres' is missing — we
+# need a second guard to fully skip on a dev-only install.
+pytest.importorskip(
+    "asyncpg",
+    reason="install the 'postgres' extra to run live Postgres integration tests",
+)
 PostgresContainer = testcontainers.PostgresContainer
 
 from ontorag_flow.core.action import ProvOActivity  # noqa: E402
