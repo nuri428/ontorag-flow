@@ -234,6 +234,12 @@ async def test_stacked_engine_explain_compares_proposer_and_validator() -> None:
     assert explanation.trace["validator_kind"] == "_ConstantValidator"
     assert "proposer_original" in explanation.trace
     assert "validator_rescored" in explanation.trace
+    # Each proposer row carries the action's params as the intervention payload
+    # — the same value the validator's score_intervention was called with, so
+    # the inspector can show "same intervention, different probability mass".
+    for entry in explanation.trace["proposer_original"]:
+        assert "intervention" in entry
+        assert isinstance(entry["intervention"], dict)
 
 
 # --- CaseManager.explain_next default for engines without explain() -----

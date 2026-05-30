@@ -256,7 +256,15 @@ class StackedEngine:
         return rescored
 
     async def explain(self, case: Case, process: ProcessDefinition) -> EngineExplanation:
-        """Show proposer's original confidences alongside the validator's rescored ones."""
+        """Show proposer's original confidences alongside the validator's rescored ones.
+
+        Each proposer entry carries the action params *because those params
+        are exactly what the validator's ``score_intervention`` was called
+        with* — i.e. the intervention payload that produced the rescored
+        posterior. Surfacing them in the trace lets an operator see *why*
+        the validator moved confidence: same params, different probability
+        mass under do(...).
+        """
 
         proposer_original = await self._proposer.propose_next(case, process)
         final = await self.propose_next(case, process)
@@ -267,10 +275,20 @@ class StackedEngine:
                 "proposer_kind": type(self._proposer).__name__,
                 "validator_kind": type(self._validator).__name__,
                 "proposer_original": [
-                    {"action": p.action_uri, "confidence": p.confidence} for p in proposer_original
+                    {
+                        "action": p.action_uri,
+                        "confidence": p.confidence,
+                        "intervention": p.params,
+                    }
+                    for p in proposer_original
                 ],
                 "validator_rescored": [
-                    {"action": p.action_uri, "confidence": p.confidence} for p in final
+                    {
+                        "action": p.action_uri,
+                        "confidence": p.confidence,
+                        "intervention": p.params,
+                    }
+                    for p in final
                 ],
             },
         )

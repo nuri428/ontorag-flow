@@ -147,19 +147,30 @@
     <p class="muted">
       Proposer: <span class="badge">{{ trace.proposer_kind }}</span>
       → Validator: <span class="badge">{{ trace.validator_kind }}</span>
+      — the validator's <code>score_intervention</code> is called with the
+      proposer's params as the intervention payload, so each row shows
+      <em>same intervention, different probability mass</em>.
     </p>
     <table>
-      <thead><tr><th>Action</th><th>Proposer confidence</th><th>Validator confidence</th></tr></thead>
+      <thead><tr>
+        <th>Action</th><th>Intervention <code>do(...)</code></th>
+        <th>Proposer confidence</th><th>Validator confidence</th><th>Δ</th>
+      </tr></thead>
       <tbody>
       {% set rescored = {} %}
       {% for r in trace.validator_rescored %}{% set _ = rescored.update({r.action: r.confidence}) %}{% endfor %}
       {% for p in trace.proposer_original %}
+        {% set v = rescored.get(p.action) %}
         <tr>
           <td class="uri">{{ p.action }}</td>
+          <td><code>{{ p.intervention | tojson }}</code></td>
           <td>{% if p.confidence is not none %}{{ '%.3f' | format(p.confidence) }}{% else %}—{% endif %}</td>
+          <td>{% if v is not none %}{{ '%.3f' | format(v) }}{% else %}—{% endif %}</td>
           <td>
-            {% set v = rescored.get(p.action) %}
-            {% if v is not none %}{{ '%.3f' | format(v) }}{% else %}—{% endif %}
+            {% if p.confidence is not none and v is not none %}
+              {% set delta = v - p.confidence %}
+              {{ '%+.3f' | format(delta) }}
+            {% else %}—{% endif %}
           </td>
         </tr>
       {% endfor %}
