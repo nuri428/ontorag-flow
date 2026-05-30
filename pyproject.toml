@@ -84,10 +84,23 @@ addopts = "-q --strict-markers --cov=src/ontorag_flow --cov-report=term --cov-fa
 skips = ["B104"]
 
 [tool.pyright]
+# Standard is pyright's modern middle ground (between basic and strict);
+# 0 errors on this codebase today. Full strict mode trips 193 warnings,
+# nearly all from Typer's dynamic decorators and intentional `Any` on SDK
+# responses — switching to strict would force a wave of cosmetic
+# annotations that hide the real signals. The extras below catch
+# high-value strict-mode patterns without that noise.
 include = ["src"]
 pythonVersion = "3.12"
-typeCheckingMode = "basic"
+typeCheckingMode = "standard"
 reportMissingImports = "error"
+reportPossiblyUnboundVariable = "error"
+reportImplicitOverride = "warning"
+reportUntypedFunctionDecorator = "warning"
+reportUntypedClassDecorator = "warning"
+reportUnnecessaryIsInstance = "warning"
+reportUnnecessaryCast = "warning"
+reportUnnecessaryComparison = "warning"
 
 [tool.coverage.run]
 source = ["ontorag_flow"]
