@@ -80,7 +80,7 @@ quote-style = "double"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-q --strict-markers --cov=src/ontorag_flow --cov-report=term --cov-fail-under=75"
+addopts = "-q --strict-markers --cov=src/ontorag_flow --cov-report=term --cov-fail-under=77"
 
 [tool.bandit]
 # `0.0.0.0` bind is intentional for containerised deployment of the API.

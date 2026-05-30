@@ -110,3 +110,78 @@ def test_root_cause_unwraps_exception_group() -> None:
     assert "ConnectionError: refused" in message
     # duplicate leaves collapse to a single entry
     assert message.count("ConnectionError: refused") == 1
+
+
+def test_root_cause_uses_class_name_when_str_is_empty() -> None:
+    assert _root_cause(RuntimeError()) == "RuntimeError"
+
+
+def test_parse_returns_none_when_no_text_blocks() -> None:
+    result = SimpleNamespace(structuredContent=None, content=[])
+    assert _parse_tool_result(result) is None
+
+
+async def test_aclose_is_idempotent_when_never_connected() -> None:
+    client = OntoragClient("http://localhost:8000/mcp")
+    await client.aclose()  # no task; should be a no-op (line 102-103)
+
+
+async def test_connect_is_idempotent_when_already_connecting() -> None:
+    """A second connect() while a task is alive returns immediately (line 59)."""
+
+    import asyncio
+
+    client = OntoragClient("http://localhost:8000/mcp")
+    pretend_task: asyncio.Task[None] = asyncio.create_task(asyncio.sleep(60))
+    client._task = pretend_task  # type: ignore[attr-defined]
+    try:
+        await client.connect()  # short-circuit early return
+    finally:
+        pretend_task.cancel()
+        try:
+            await pretend_task
+        except asyncio.CancelledError:
+            pass
+
+
+async def test_list_tools_requires_connection() -> None:
+    client = OntoragClient("http://localhost:8000/mcp")
+    with pytest.raises(OntoragClientError):
+        await client.list_tools()
+
+
+async def test_list_tools_returns_tool_names() -> None:
+    client = OntoragClient("http://localhost:8000/mcp")
+    session = AsyncMock()
+    tool_a = SimpleNamespace(name="find_entities")
+    tool_b = SimpleNamespace(name="describe_entity")
+    session.list_tools.return_value = SimpleNamespace(tools=[tool_a, tool_b])
+    client._session = session  # type: ignore[attr-defined]
+
+    names = await client.list_tools()
+    assert names == ["find_entities", "describe_entity"]
+
+
+async def test_zombie_guard_uses_connect_error_when_cancelled() -> None:
+    """When the serve task was cancelled, fall back to ``_connect_error`` for the cause."""
+
+    import asyncio
+
+    client = OntoragClient("http://localhost:8000/mcp")
+
+    async def _placeholder() -> None:
+        await asyncio.sleep(0.01)
+
+    task: asyncio.Task[None] = asyncio.create_task(_placeholder())
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    client._task = task  # type: ignore[attr-defined]
+    client._session = AsyncMock()  # type: ignore[attr-defined]
+    client._connect_error = RuntimeError("recorded cause")  # type: ignore[attr-defined]
+
+    with pytest.raises(OntoragClientError, match="recorded cause"):
+        await client.call_tool("anything", {})
