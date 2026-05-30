@@ -31,6 +31,8 @@ class RequestHumanReview(BaseAction):
     side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset(
         {SideEffectKind.HUMAN, SideEffectKind.CASE_STATE}
     )
+    # Waking a human is by definition not an auto-execute action.
+    auto_execute_disabled: ClassVar[bool] = True
 
     class Params(BaseModel):
         reason: str = Field(

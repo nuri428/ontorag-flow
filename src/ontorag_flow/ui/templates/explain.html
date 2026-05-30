@@ -141,6 +141,18 @@
       <summary>Raw reply</summary>
       <pre>{{ trace.raw_reply }}</pre>
     </details>
+    {% if trace.rejected_proposals %}
+    <p class="muted">
+      <span class="badge failed">{{ trace.rejected_proposals | length }} rejected</span>
+      — LLM-returned proposals dropped by the parser. Check for
+      <code>action_not_allowed</code> reasons; those can signal prompt
+      injection attempts.
+    </p>
+    <details>
+      <summary>Rejected proposals</summary>
+      <pre>{{ trace.rejected_proposals | tojson(indent=2) }}</pre>
+    </details>
+    {% endif %}
     {% endif %}
 
   {% elif kind == "StackedEngine" %}

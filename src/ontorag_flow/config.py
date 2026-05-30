@@ -60,6 +60,35 @@ class Settings(BaseSettings):
         alias="CONNECT_ONTORAG",
         description="Open an ontorag MCP connection at startup to enable the Bayesian engine.",
     )
+    ontorag_mcp_https_only: bool = Field(
+        default=False,
+        alias="ONTORAG_MCP_HTTPS_ONLY",
+        description=(
+            "When true, refuse to connect to ontorag MCP unless the URL uses "
+            "https://. Protects against accidental plain-text deployments and "
+            "URL hijack via env-var manipulation."
+        ),
+    )
+    ontorag_expected_version: str | None = Field(
+        default=None,
+        alias="ONTORAG_EXPECTED_VERSION",
+        description=(
+            "Optional pinned ontorag server version string. When set, the "
+            "client verifies the server's reported version after connect "
+            "and logs a WARN (does not abort) on mismatch — drift detection "
+            "for the trust boundary between the two repos."
+        ),
+    )
+    plugin_allowlist: str | None = Field(
+        default=None,
+        alias="ONTORAG_FLOW_PLUGIN_ALLOWLIST",
+        description=(
+            "Comma-separated list of entry-point names from the "
+            "'ontorag_flow.actions' group that are allowed to load. When set, "
+            "any other discovered plugin is skipped (logged as WARN). Unset = "
+            "all plugins load (backward-compatible default)."
+        ),
+    )
 
 
 @lru_cache(maxsize=1)

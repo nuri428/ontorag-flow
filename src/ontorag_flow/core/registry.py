@@ -78,10 +78,16 @@ def _load_plugin_actions(registry: ActionRegistry) -> None:
     no-arg. URI collisions are resolved by registry semantics (last wins),
     which lets users override a built-in action by shipping a plugin with
     the same URI — intentional, lets a deployment swap an implementation.
+
+    Allowlist: when ``ONTORAG_FLOW_PLUGIN_ALLOWLIST`` is set to a
+    comma-separated list of entry-point names, any plugin whose name is
+    not in the list is skipped (WARN logged). Unset = all plugins load
+    (backward-compatible default for dev / single-tenant).
     """
 
     from importlib.metadata import entry_points
 
+    from ontorag_flow.config import get_settings
     from ontorag_flow.log import get_logger
 
     logger = get_logger(__name__)
@@ -91,7 +97,19 @@ def _load_plugin_actions(registry: ActionRegistry) -> None:
         logger.warning("Could not enumerate %r entry points: %s", _PLUGIN_GROUP, exc)
         return
 
+    raw_allow = get_settings().plugin_allowlist
+    allowed: set[str] | None = None
+    if raw_allow is not None:
+        allowed = {name.strip() for name in raw_allow.split(",") if name.strip()}
+
     for entry in eps:
+        if allowed is not None and entry.name not in allowed:
+            logger.warning(
+                "Plugin %r (entry-point %r) not in ONTORAG_FLOW_PLUGIN_ALLOWLIST; skipping.",
+                entry.value,
+                entry.name,
+            )
+            continue
         try:
             action_cls = entry.load()
             instance = action_cls()

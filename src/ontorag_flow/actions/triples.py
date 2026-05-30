@@ -59,6 +59,8 @@ class AssertTriple(BaseAction):
         "Write one (s, p, o) triple into ontorag's ABox via the assert_triple MCP tool."
     )
     side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset({SideEffectKind.ABOX_WRITE})
+    # ABox write-back is externally visible — operator must click.
+    auto_execute_disabled: ClassVar[bool] = True
 
     input_schema: ClassVar[type[BaseModel]] = _TripleParams
 
@@ -108,6 +110,8 @@ class RetractTriple(BaseAction):
         "Remove one (s, p, o) triple from ontorag's ABox via the retract_triple MCP tool."
     )
     side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset({SideEffectKind.ABOX_WRITE})
+    # ABox write-back is externally visible — operator must click.
+    auto_execute_disabled: ClassVar[bool] = True
 
     input_schema: ClassVar[type[BaseModel]] = _TripleParams
 

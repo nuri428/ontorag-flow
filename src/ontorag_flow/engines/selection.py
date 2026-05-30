@@ -159,7 +159,9 @@ class EngineResolver:
                 )
             proxy = process.model_copy(update={"engine": kind, "arbitration": None})
             engines.append((kind, self.for_process(proxy)))
-        return CascadeEngine(engines)
+        # Optional health check: drops garbage proposals from compromised
+        # proposers before they block fallback. See cascade.py:_is_sane.
+        return CascadeEngine(engines, health_check=bool(config.get("health_check")))
 
     def _build_stacked(self, process: ProcessDefinition) -> StackedEngine:
         """Construct a :class:`StackedEngine` from ``process.arbitration``.

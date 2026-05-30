@@ -211,6 +211,13 @@ class BaseAction(abc.ABC):
     description: ClassVar[str] = ""
     input_schema: ClassVar[type[BaseModel]]
     side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset({SideEffectKind.NONE})
+    # Auto-execute safety: when True, the UI's "Execute top proposal" and any
+    # auto-run policy MUST skip this action even if process.execute_policy
+    # would otherwise permit it. Externally-visible side effects
+    # (ABOX_WRITE, EXTERNAL_API) and HUMAN handoffs set this to True so an
+    # automation can never write back to ontorag or wake a human without an
+    # explicit operator click. CASE_STATE-only actions can be auto-run.
+    auto_execute_disabled: ClassVar[bool] = False
 
     async def validate(self, params: BaseModel, state: CaseState) -> bool:
         """Pre-execution precondition check. Defaults to permissible."""

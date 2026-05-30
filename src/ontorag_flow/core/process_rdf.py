@@ -119,6 +119,24 @@ def process_to_rdf(process: ProcessDefinition, *, format: str = "turtle") -> str
                 Literal(json.dumps(process.skeleton)),
             )
         )
+    if process.max_llm_confidence is not None:
+        graph.add((subject, OF.maxLlmConfidence, Literal(process.max_llm_confidence)))
+    if process.execute_policy:
+        graph.add(
+            (
+                subject,
+                OF.executePolicyJson,
+                Literal(json.dumps(process.execute_policy, sort_keys=True)),
+            )
+        )
+    if process.audit_redact:
+        graph.add(
+            (
+                subject,
+                OF.auditRedactJson,
+                Literal(json.dumps(process.audit_redact)),
+            )
+        )
 
     return graph.serialize(format=format)
 
@@ -191,6 +209,13 @@ def load_process_rdf(path: str | Path, *, format: str | None = None) -> ProcessD
             timer_events=_json_literal(graph, subject, OF.timerEventsJson) or [],
             arbitration=_json_literal(graph, subject, OF.arbitrationJson),
             skeleton=_json_literal(graph, subject, OF.skeletonJson) or [],
+            max_llm_confidence=(
+                float(str(graph.value(subject, OF.maxLlmConfidence)))
+                if graph.value(subject, OF.maxLlmConfidence) is not None
+                else None
+            ),
+            execute_policy=_json_literal(graph, subject, OF.executePolicyJson) or {},
+            audit_redact=_json_literal(graph, subject, OF.auditRedactJson) or [],
         )
     except ValidationError as exc:
         raise ProcessParseError(

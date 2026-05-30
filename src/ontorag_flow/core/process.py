@@ -85,6 +85,41 @@ class ProcessDefinition(BaseModel):
             "(pure ACM)."
         ),
     )
+    max_llm_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Optional ceiling on confidence values returned by LlmAgentEngine "
+            "(also applies inside Stacked / Cascade when the sub-engine is llm). "
+            "Defends against an LLM that returns 1.0 every time — auto-execute "
+            "thresholds need an honest range. None = no cap."
+        ),
+    )
+    execute_policy: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Auto-execute gate for the UI's 'Execute top proposal' button (and "
+            "any future auto-run policy). Shape: {'auto': bool, "
+            "'min_confidence': float}. When 'auto' is true and the top "
+            "proposal's confidence is at least 'min_confidence', the operator "
+            "/ scheduler may auto-run; otherwise an explicit click is required. "
+            "Empty (default) = no auto-execute permitted regardless of "
+            "confidence; operator must always click."
+        ),
+    )
+    audit_redact: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Audit redaction patterns. Any property/output key whose name "
+            "matches one of these globs (fnmatch) has its VALUE replaced "
+            "with '***' before the activity is persisted. Applies to "
+            "ProvOActivity.used, .generated, .metadata, and to the proposal "
+            "params / engine.explain() trace surfaced through the UI. "
+            "Use for PII keys (ssn, email, dob), credentials, or anything "
+            "the audit log should not retain verbatim. Empty = no redaction."
+        ),
+    )
     constraints: dict[str, Any] = Field(
         default_factory=dict,
         description=(

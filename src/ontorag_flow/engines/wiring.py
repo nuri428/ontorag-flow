@@ -45,6 +45,20 @@ async def maybe_connect_ontorag(
 
     if not settings.connect_ontorag:
         return None
+
+    # Transport trust gate: refuse plain-text when the operator opted into
+    # HTTPS-only. URL hijack via env-var manipulation is the threat model.
+    if settings.ontorag_mcp_https_only and not settings.ontorag_mcp_url.startswith("https://"):
+        message = (
+            f"ontorag MCP URL is not https:// ({settings.ontorag_mcp_url}) and "
+            f"ONTORAG_MCP_HTTPS_ONLY=true; refusing to connect."
+        )
+        if on_error is not None:
+            on_error(message)
+        else:
+            logger.warning(message)
+        return None
+
     from ontorag_flow.ontorag_client import OntoragClientError
 
     client = OntoragClient(settings.ontorag_mcp_url)
@@ -57,4 +71,23 @@ async def maybe_connect_ontorag(
         else:
             logger.warning(message)
         return None
+
+    # Optional version pin: drift detection between this repo and ontorag.
+    # WARN only — the connection still works, but the operator knows.
+    if settings.ontorag_expected_version is not None:
+        try:
+            status = await client.call_tool("get_status", {})
+            actual = status.get("version") if isinstance(status, dict) else None
+            if actual and actual != settings.ontorag_expected_version:
+                drift = (
+                    f"ontorag version drift: expected "
+                    f"{settings.ontorag_expected_version!r}, got {actual!r}"
+                )
+                if on_error is not None:
+                    on_error(drift)
+                else:
+                    logger.warning(drift)
+        except Exception as exc:  # noqa: BLE001 — drift check must not abort boot
+            logger.debug("ontorag version check skipped: %s", exc)
+
     return client

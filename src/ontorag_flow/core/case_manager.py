@@ -87,6 +87,38 @@ COMPENSATION_ACTION_URI = "urn:ontorag-flow:action:_Compensate"
 """Synthetic action URI marking a composite compensation event in case history."""
 
 
+_REDACTION_MASK = "***"
+
+
+def _redact(payload: dict[str, Any], patterns: list[str]) -> dict[str, Any]:
+    """Return a copy of ``payload`` with values for matching keys masked.
+
+    ``patterns`` are ``fnmatch`` globs ('ssn', 'patient.*', 'api_key',
+    '*token*'). Matching is recursive: nested dicts are walked, lists of
+    dicts too. Non-dict / non-list values pass through unchanged.
+    """
+
+    from fnmatch import fnmatch
+
+    if not patterns:
+        return payload
+
+    def _walk(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                k: (_REDACTION_MASK if any(fnmatch(k, pat) for pat in patterns) else _walk(v))
+                for k, v in value.items()
+            }
+        if isinstance(value, list):
+            return [_walk(item) for item in value]
+        return value
+
+    # _walk on a dict always returns a dict (its first branch); type-narrow
+    # without an assert so bandit's B101 stays clean.
+    walked = _walk(payload)
+    return walked if isinstance(walked, dict) else payload
+
+
 def new_case_uri() -> str:
     """Mint a fresh case URI."""
 
@@ -210,14 +242,30 @@ class CaseManager:
         engine = self._engine_factory(process)
         explain = getattr(engine, "explain", None)
         if explain is not None:
-            return await explain(case, process)
-        # Default explanation for engines that haven't opted in.
-        proposals = await engine.propose_next(case, process)
-        return _Explanation(
-            engine_kind=type(engine).__name__,
-            proposals=proposals,
-            trace={"note": "engine does not implement explain(); only proposals available"},
-        )
+            explanation = await explain(case, process)
+        else:
+            # Default explanation for engines that haven't opted in.
+            proposals = await engine.propose_next(case, process)
+            explanation = _Explanation(
+                engine_kind=type(engine).__name__,
+                proposals=proposals,
+                trace={"note": "engine does not implement explain(); only proposals available"},
+            )
+
+        # Redact sensitive keys from the trace (and from proposal params),
+        # mirroring what manager.execute_action does for activity rows.
+        # The UI displays this verbatim, so this is the natural choke point.
+        if process.audit_redact:
+            explanation = explanation.model_copy(
+                update={
+                    "trace": _redact(explanation.trace, process.audit_redact),
+                    "proposals": [
+                        p.model_copy(update={"params": _redact(p.params, process.audit_redact)})
+                        for p in explanation.proposals
+                    ],
+                },
+            )
+        return explanation
 
     async def counterfactual(
         self,
@@ -350,6 +398,24 @@ class CaseManager:
             case.state,
             informed_by=case.last_activity_uri,
         )
+
+        # Audit redaction: mask sensitive keys before the activity is
+        # persisted. Applied to used / generated / metadata; the snapshot
+        # in state_before is also masked. Patterns are fnmatch globs from
+        # process.audit_redact (e.g. ['ssn', 'patient.*', 'api_key']).
+        if process.audit_redact:
+            outcome.activity = outcome.activity.model_copy(
+                update={
+                    "used": _redact(outcome.activity.used, process.audit_redact),
+                    "generated": _redact(outcome.activity.generated, process.audit_redact),
+                    "state_before": (
+                        _redact(outcome.activity.state_before, process.audit_redact)
+                        if outcome.activity.state_before is not None
+                        else None
+                    ),
+                },
+            )
+            await self._executor.audit_store.record(outcome.activity)
 
         # Skeleton deviation tag: when the process declares a happy-path
         # skeleton, compare *this* action against the next expected entry.

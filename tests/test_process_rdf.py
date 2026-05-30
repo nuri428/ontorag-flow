@@ -83,6 +83,9 @@ def test_full_round_trip_preserves_every_field(tmp_path: Path) -> None:
         ],
         arbitration={"proposer": "rule", "validator": "causal"},
         skeleton=["urn:a:1", "urn:a:2"],
+        max_llm_confidence=0.85,
+        execute_policy={"auto": True, "min_confidence": 0.9},
+        audit_redact=["ssn", "patient*"],
     )
 
     path = tmp_path / "full.ttl"
@@ -100,6 +103,10 @@ def test_full_round_trip_preserves_every_field(tmp_path: Path) -> None:
     assert loaded.arbitration == process.arbitration
     # Skeleton preserves order — first action stays first after a Turtle round-trip.
     assert loaded.skeleton == ["urn:a:1", "urn:a:2"]
+    # Security-hardening fields all round-trip too (S2 / S3 / S6).
+    assert loaded.max_llm_confidence == 0.85
+    assert loaded.execute_policy == {"auto": True, "min_confidence": 0.9}
+    assert loaded.audit_redact == ["ssn", "patient*"]
 
 
 def test_json_ld_round_trip(tmp_path: Path) -> None:
