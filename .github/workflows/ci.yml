@@ -38,6 +38,46 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check src tests examples
 
+  typecheck:
+    name: Type check (pyright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install all extras so optional deps resolve
+        run: uv sync --all-extras
+
+      - name: Run pyright
+        run: uv run pyright src
+
+  security:
+    name: Security scan (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install dev dependencies
+        run: uv sync --extra dev
+
+      - name: Run bandit
+        run: uv run bandit -r src -c pyproject.toml
+
   test:
     name: Test (pytest + coverage)
     runs-on: ubuntu-latest

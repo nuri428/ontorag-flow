@@ -12,9 +12,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ontorag_flow.config import Settings
-from ontorag_flow.engines.bayesian import SupportsToolCall
 from ontorag_flow.engines.llm_agent import LlmClient
 from ontorag_flow.log import get_logger
+from ontorag_flow.ontorag_client.client import OntoragClient
 
 logger = get_logger(__name__)
 
@@ -35,7 +35,7 @@ async def maybe_connect_ontorag(
     settings: Settings,
     *,
     on_error: Callable[[str], None] | None = None,
-) -> SupportsToolCall | None:
+) -> OntoragClient | None:
     """Open an ontorag MCP connection if enabled; None if disabled/unreachable.
 
     Failures are non-fatal — the resolver simply marks Bayesian/Causal engines as
@@ -45,7 +45,7 @@ async def maybe_connect_ontorag(
 
     if not settings.connect_ontorag:
         return None
-    from ontorag_flow.ontorag_client import OntoragClient, OntoragClientError
+    from ontorag_flow.ontorag_client import OntoragClientError
 
     client = OntoragClient(settings.ontorag_mcp_url)
     try:

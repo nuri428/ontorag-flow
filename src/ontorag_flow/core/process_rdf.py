@@ -92,7 +92,12 @@ def load_process_rdf(path: str | Path) -> ProcessDefinition:
         raise ProcessParseError(
             f"Expected exactly one of:Process in {file_path}, found {len(subjects)}."
         )
-    subject = subjects[0]
+    candidate = subjects[0]
+    if not isinstance(candidate, URIRef):
+        raise ProcessParseError(
+            f"Process subject in {file_path} must be a URI, not {type(candidate).__name__}."
+        )
+    subject: URIRef = candidate
 
     name = graph.value(subject, OF.name)
     allowed = sorted(str(obj) for obj in graph.objects(subject, OF.allowedAction))

@@ -143,7 +143,11 @@ def action_run(
 
     params = _parse_params(param)
     try:
-        outcome = asyncio.run(_run_action(action, params))
+        # BaseAction is what every concrete action subclasses; the executor's
+        # Action Protocol is structurally satisfied but pyright sees the
+        # narrower Params types as a Liskov violation. Suppressed at this
+        # boundary (and at the case_manager boundary).
+        outcome = asyncio.run(_run_action(action, params))  # pyright: ignore[reportArgumentType]
     except ActionValidationError as exc:
         console.print(f"[red]Validation failed:[/] {exc}")
         raise typer.Exit(code=1) from exc

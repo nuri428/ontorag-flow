@@ -46,8 +46,14 @@ class AnthropicClient:
             system=system,
             messages=[{"role": "user", "content": user}],
         )
+        # Anthropic's ContentBlock is a union of many types (text / tool_use /
+        # thinking / ...); only TextBlock has a ``text`` attribute. Filter by
+        # the type tag, then use getattr so the type checker is happy with the
+        # union without us re-exporting every block class.
         return "".join(
-            block.text for block in message.content if getattr(block, "type", None) == "text"
+            getattr(block, "text", "")
+            for block in message.content
+            if getattr(block, "type", None) == "text"
         )
 
 

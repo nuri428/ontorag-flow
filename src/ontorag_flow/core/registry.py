@@ -6,24 +6,31 @@ plugin actions are loaded at runtime by the CLI (``action register``).
 
 from __future__ import annotations
 
-from ontorag_flow.core.action import Action
+from ontorag_flow.core.action import BaseAction
 
 
 class ActionRegistry:
-    """An in-memory map of action URI -> action instance."""
+    """An in-memory map of action URI -> action instance.
+
+    Typed against :class:`BaseAction` (not the structural :class:`Action`
+    protocol) because concrete actions narrow ``execute(params: Params, ...)``
+    to their own Params class — a Liskov violation against the Protocol that
+    is harmless at runtime but rightly flagged by type checkers. BaseAction
+    is what gets registered in practice.
+    """
 
     def __init__(self) -> None:
-        self._actions: dict[str, Action] = {}
+        self._actions: dict[str, BaseAction] = {}
 
-    def register(self, action: Action) -> None:
+    def register(self, action: BaseAction) -> None:
         """Register an action, replacing any prior action with the same URI."""
 
         self._actions[action.uri] = action
 
-    def get(self, uri: str) -> Action | None:
+    def get(self, uri: str) -> BaseAction | None:
         return self._actions.get(uri)
 
-    def all(self) -> list[Action]:
+    def all(self) -> list[BaseAction]:
         return list(self._actions.values())
 
     def __contains__(self, uri: object) -> bool:

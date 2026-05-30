@@ -290,7 +290,10 @@ class CaseManager:
             raise ActionNotFoundError(action_uri)
 
         outcome = await self._executor.execute(
-            action, params, case.state, informed_by=case.last_activity_uri
+            action,  # pyright: ignore[reportArgumentType] -- see registry.py docstring
+            params,
+            case.state,
+            informed_by=case.last_activity_uri,
         )
 
         new_case = case.record_execution(outcome.activity, outcome.state)
