@@ -150,3 +150,6 @@ jobs:
 
       - name: Run supply-chain RCA demo (auto-suspend + resume)
         run: uv run python examples/supply_chain_rca/run_demo.py
+
+      - name: Run supply-chain RCA LLM demo (fake mode, no API key)
+        run: uv run python examples/supply_chain_rca/run_demo_llm.py

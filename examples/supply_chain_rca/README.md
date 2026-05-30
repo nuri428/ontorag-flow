@@ -39,27 +39,42 @@ The audit trail captures all 5 activities with full PROV-O provenance
 
 ## Switching to the LLM engine
 
-The same process can be driven by `LlmAgentEngine` without changing the
-actions or the rules:
+The same process, the same custom actions, the same constraints — only
+the engine changes:
 
 ```bash
-export LLM_PROVIDER=anthropic          # or openai / ollama
-export LLM_MODEL=claude-sonnet-4-6
-# In process.yaml: add `engine: llm` (or remove the rules: section).
-uv run python examples/supply_chain_rca/run_demo.py
+# fake mode (deterministic, no API key) — what CI runs
+uv run python examples/supply_chain_rca/run_demo_llm.py
+
+# live mode against a real model
+LLM_PROVIDER=anthropic LLM_MODEL=claude-sonnet-4-6 \
+    uv run python examples/supply_chain_rca/run_demo_llm.py
 ```
 
-The agent reads the allowed-action catalog (with each action's
-description and input schema) and proposes the next investigation step in
-free reasoning. The CMMN constraints (`requires`) still get enforced by the
-case manager, so the LLM can't skip steps even if it tries.
+In **fake mode** a small `FakeReasoningLlm` parses the prompt for current
+case state and returns deterministic LLM-ish proposals so you can read
+the framework's wiring (prompt → JSON → ranked proposals) without paying
+for tokens. Visible in the output as a `FAKE` mode label and notably
+richer rationales than the rule engine's terse one-liners.
+
+In **live mode** the real Anthropic / OpenAI / Ollama SDK is called.
+
+In both modes the CMMN constraints (`requires`) are still enforced by
+the case manager, so the LLM can't skip steps even if it tries.
+
+`run_demo_llm.py` demonstrates the key claim of the framework: *process
+definition is data, engine is policy.* The same `process.yaml` runs
+under either `RuleEngine` (`run_demo.py`) or `LlmAgentEngine`
+(`run_demo_llm.py`); the engine override happens in code with
+`process.model_copy(update={"engine": "llm"})`.
 
 ## Files
 
 ```
 examples/supply_chain_rca/
-├── actions.py        # RecordEvidence / QuerySupplier / RouteThroughBackup / ApproveCompensation
-├── process.yaml      # allowed_actions + goal + requires + 4 RuleEngine rules
-├── run_demo.py       # the end-to-end script you ran above
-└── README.md         # this file
+├── actions.py          # RecordEvidence / QuerySupplier / RouteThroughBackup / ApproveCompensation
+├── process.yaml        # allowed_actions + goal + requires + 4 RuleEngine rules
+├── run_demo.py         # RuleEngine-driven (the rule-engine path)
+├── run_demo_llm.py     # LlmAgentEngine-driven; fake reasoning by default, live with LLM_PROVIDER
+└── README.md           # this file
 ```
