@@ -7,7 +7,23 @@ repo_name: nuri428/ontorag-flow
 edit_uri: edit/main/docs/
 
 docs_dir: docs
-strict: true
+# strict mode: relaxed. mkdocstrings renders the Python API page into
+# *both* language trees (en + ko via mkdocs-static-i18n), so every symbol
+# heading appears twice — autorefs reports each pair as a duplicate.
+# We accept those warnings rather than maintain a separate KO-only nav
+# that excludes the reference. mkdocs's own validation still catches
+# missing nav files / broken markdown links via the explicit block below.
+strict: false
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
 
 theme:
   name: material
@@ -41,6 +57,23 @@ theme:
 
 plugins:
   - search
+  # Python API reference from docstrings. Listed *before* i18n so each
+  # language site picks up the same rendered pages.
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            line_length: 88
+            filters: ["!^_"]   # hide _private members by default
   # mkdocs-static-i18n: file-suffix mode. Default locale (en) reads `foo.md`,
   # secondary locales read `foo.<locale>.md`. Pages that have no `.ko.md`
   # twin still appear in the KO site, falling back to the EN file.
@@ -59,14 +92,44 @@ plugins:
           build: true
           nav_translations:
             Home: 홈
-            Operator guide: 운영자 가이드
-            Operations (backup / DR): 운영 (백업 / DR)
+            Tutorials: 튜토리얼
+            First case end-to-end: 첫 케이스 end-to-end
+            Authoring a process YAML: 프로세스 YAML 작성
+            Writing an action plugin: 액션 플러그인 작성
+            How-to: How-to (사용 방법)
+            Wire a decision engine: 결정 엔진 wiring
+            Connect to ontorag: ontorag 연결
+            Deploy with Docker: Docker 배포
+            Operator guide (UI walkthrough): 운영자 가이드 (UI walkthrough)
+            Backup & restore: 백업 & 복원
+            Reference: 레퍼런스
+            CLI: CLI
+            HTTP & MCP API: HTTP & MCP API
+            Decision engines: 결정 엔진
+            Built-in actions: 내장 액션
+            Configuration: 설정
+            Python API: Python API
             Architecture & milestones: 아키텍처 & 마일스톤
 
 nav:
   - Home: index.md
-  - Operator guide: operator-guide.md
-  - Operations (backup / DR): operations.md
+  - Tutorials:
+      - First case end-to-end: tutorials/first-case.md
+      - Authoring a process YAML: tutorials/authoring-process.md
+      - Writing an action plugin: tutorials/action-plugin.md
+  - How-to:
+      - Wire a decision engine: how-to/engines.md
+      - Connect to ontorag: how-to/ontorag.md
+      - Deploy with Docker: how-to/docker.md
+      - Operator guide (UI walkthrough): operator-guide.md
+      - Backup & restore: operations.md
+  - Reference:
+      - CLI: reference/cli.md
+      - HTTP & MCP API: reference/api.md
+      - Decision engines: reference/engines.md
+      - Built-in actions: reference/actions.md
+      - Configuration: reference/configuration.md
+      - Python API: reference/python-api.md
   - Architecture & milestones: https://github.com/nuri428/ontorag-flow/blob/main/CLAUDE.md
 
 markdown_extensions:

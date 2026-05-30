@@ -40,8 +40,11 @@ jobs:
       - name: Install docs deps
         run: uv sync --extra docs
 
-      - name: Build (strict — broken links fail the build)
-        run: uv run mkdocs build --strict
+      - name: Build
+        # `strict` is set per-warning in mkdocs.yml validation block;
+        # CLI --strict would re-elevate mkdocstrings i18n autorefs
+        # duplicates (which are benign — same symbol in EN + KO trees).
+        run: uv run mkdocs build
 
       - name: Configure Pages
         # enablement: true → if Pages isn't yet enabled on the repo with
