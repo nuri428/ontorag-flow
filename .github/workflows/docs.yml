@@ -44,7 +44,13 @@ jobs:
         run: uv run mkdocs build --strict
 
       - name: Configure Pages
+        # enablement: true → if Pages isn't yet enabled on the repo with
+        # "GitHub Actions" as the build source, this turns it on. Requires
+        # the default GITHUB_TOKEN to have admin scope; if it fails, the
+        # one-time manual fallback is Settings → Pages → Source: GitHub Actions.
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
