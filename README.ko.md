@@ -279,6 +279,9 @@ human)만 동작합니다.
   **운영자 가이드** (EN + KO). 각 lifecycle 버튼이 무엇을 하는지, error
   callout 해석 방법, 자주 만나는 시나리오, counterfactual replay, 엔진
   inspector, 그리고 UI가 *의도적으로 하지 않는* 것.
+- [`docs/operations.md`](docs/operations.md) — SQLite / Postgres 배포의
+  **백업 / 복원 / 재해 복구** (EN + KO), 운영자가 시스템을 다시 열기 전
+  실행할 사후 복원 smoke flow 포함.
 - [`CLAUDE.md`](CLAUDE.md) — 프로젝트 사양, 아키텍처 근거, milestone 계획,
   anti-pattern, **v1.x를 위한 알려진 위험** (history bloat, write-ahead
   audit), 그리고 어떤 *Open question*들이 **DECIDED** vs **PARTIAL**인지의

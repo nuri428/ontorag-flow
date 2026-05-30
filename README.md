@@ -281,6 +281,10 @@ docstrings; this section is the index.
   guide** for the browser UI (EN + KO). What each lifecycle button does,
   how to read error callouts, common scenarios, counterfactual replay,
   the engine inspector, and what the UI deliberately does *not* do.
+- [`docs/operations.md`](docs/operations.md) — **backup / restore /
+  disaster recovery** for SQLite and Postgres deployments (EN + KO),
+  plus the post-restore smoke flow operators should run before
+  reopening the system.
 - [`CLAUDE.md`](CLAUDE.md) — project specification, architecture
   rationale, milestone plan, anti-patterns, **Known risks for v1.x**
   (history bloat, write-ahead audit), and the running record of which
