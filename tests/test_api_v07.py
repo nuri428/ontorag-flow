@@ -58,6 +58,42 @@ def test_compensate_endpoint_undoes_actions(client: TestClient) -> None:
     assert body["state"]["properties"] == {}
 
 
+def test_subcase_endpoint_links_child_to_parent(client: TestClient) -> None:
+    client.post("/processes", json=PROCESS)
+    parent_uri = client.post("/cases", json={"process_uri": "urn:p:lifecycle"}).json()[
+        "case_uri"
+    ]
+
+    resp = client.post(
+        f"/cases/{parent_uri}/subcase", json={"process_uri": "urn:p:lifecycle"}
+    )
+    assert resp.status_code == 200
+    child = resp.json()
+    assert child["parent_uri"] == parent_uri
+    assert child["case_uri"] != parent_uri
+
+
+def test_tick_endpoint_fires_due_timers(client: TestClient) -> None:
+    proc = {
+        **PROCESS,
+        "process_uri": "urn:p:lifecycle-timer",
+        "timer_events": [
+            {"after_minutes": 0, "action": UPDATE, "params": {"key": "ticked", "value": True}}
+        ],
+    }
+    client.post("/processes", json=proc)
+    case_uri = client.post("/cases", json={"process_uri": "urn:p:lifecycle-timer"}).json()[
+        "case_uri"
+    ]
+
+    resp = client.post("/cases/tick")
+    assert resp.status_code == 200
+    assert resp.json() == [f"{case_uri}#0"]
+
+    state = client.get(f"/cases/{case_uri}").json()["state"]["properties"]
+    assert state.get("ticked") is True
+
+
 def test_fork_endpoint_creates_new_case(client: TestClient) -> None:
     source = _create_case(client)
     client.post(

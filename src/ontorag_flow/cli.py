@@ -396,6 +396,52 @@ def case_resume(case_uri: str = typer.Argument(..., help="Case URI.")) -> None:
     console.print(f"[green]Resumed.[/] {case.case_uri}")
 
 
+@case_app.command("tick")
+def case_tick() -> None:
+    """Fire elapsed timer events across all open cases.
+
+    Schedule this from cron / a Kubernetes CronJob / a systemd timer at
+    whatever cadence your tightest SLA needs.
+    """
+
+    fired = asyncio.run(_with_manager(lambda m: m.tick()))
+    if not fired:
+        console.print("[dim]no timers were due.[/]")
+        return
+    console.print(f"[green]Fired {len(fired)} timer(s):[/]")
+    for entry in fired:
+        console.print(f"  - {entry}")
+
+
+@case_app.command("subcase")
+def case_subcase(
+    parent_uri: str = typer.Argument(..., help="Parent case URI."),
+    process_uri: str = typer.Argument(..., help="Process URI governing the child case."),
+    initial_state: list[str] = typer.Option(
+        [],
+        "--initial-state",
+        "-s",
+        help="Seed property as key=value (JSON or string).",
+    ),
+) -> None:
+    """Spawn a child case under the given parent.
+
+    When the child case closes, the parent's state gains
+    ``subcase_<child_uri>_closed`` and ``subcase_<child_uri>_state`` so a
+    parent decision engine can react to the child's outcome.
+    """
+
+    state = _parse_params(initial_state)
+    try:
+        case = asyncio.run(
+            _with_manager(lambda m: m.create_subcase(parent_uri, process_uri, initial_state=state))
+        )
+    except CaseManagerError as exc:
+        console.print(f"[red]{type(exc).__name__}:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Created subcase[/] {case.case_uri} (parent={parent_uri})")
+
+
 @case_app.command("fork")
 def case_fork(
     case_uri: str = typer.Argument(..., help="Case URI to fork from."),

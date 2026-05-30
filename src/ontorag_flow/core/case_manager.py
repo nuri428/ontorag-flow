@@ -316,7 +316,94 @@ class CaseManager:
             logger.info("Case %s suspended for human review.", case_uri)
 
         await self._cases.update_case(new_case)
+
+        # If this case just closed and has a parent, project the outcome
+        # onto the parent so its decision engine can react.
+        if new_case.status is CaseStatus.CLOSED and new_case.parent_uri is not None:
+            await self._notify_parent_of_child_close(new_case)
+
         return new_case, outcome
+
+    async def _notify_parent_of_child_close(self, child: Case) -> None:
+        """Mark the parent's state with the child's terminal snapshot."""
+
+        parent = await self.get_case(child.parent_uri)  # type: ignore[arg-type]
+        if parent is None:
+            logger.warning(
+                "Subcase %s closed but parent %s is gone; nothing to project.",
+                child.case_uri,
+                child.parent_uri,
+            )
+            return
+        updates = {
+            f"subcase_{child.case_uri}_closed": True,
+            f"subcase_{child.case_uri}_state": dict(child.state.properties),
+        }
+        new_state = parent.state.model_copy(
+            update={"properties": {**parent.state.properties, **updates}}
+        )
+        await self._cases.update_case(
+            parent.model_copy(update={"state": new_state, "updated_at": utcnow()})
+        )
+
+    # --- timer events ------------------------------------------------------
+
+    async def tick(self) -> list[str]:
+        """Fire elapsed timer events across all OPEN cases.
+
+        For every open case whose process declares ``timer_events``, walk
+        the entries and fire any whose ``after_minutes`` from
+        ``case.created_at`` has elapsed and which hasn't already fired
+        (tracked in case state under ``_timers_fired`` as a list of timer
+        indices). Each fire goes through :meth:`execute_action` so it gets
+        the full audit + side-effect + constraint treatment.
+
+        Returns:
+            The list of (case_uri, timer_index) pairs that fired, flattened
+            into a string list ``["urn:c:1#0", ...]``.
+        """
+
+        now = utcnow()
+        fired: list[str] = []
+        open_cases = await self.find_cases(status=CaseStatus.OPEN)
+        for case in open_cases:
+            process = await self._processes.get_process(case.process_uri)
+            if process is None or not process.timer_events:
+                continue
+            elapsed_minutes = (now - case.created_at).total_seconds() / 60
+            already_fired = set(case.state.properties.get("_timers_fired", []))
+            for index, spec in enumerate(process.timer_events):
+                if index in already_fired:
+                    continue
+                after = spec.get("after_minutes", 0)
+                if elapsed_minutes < after:
+                    continue
+                # Mark fired BEFORE executing so an exception in the action
+                # doesn't cause a re-fire on the next tick.
+                marked = sorted({*already_fired, index})
+                new_properties = {**case.state.properties, "_timers_fired": marked}
+                new_state = case.state.model_copy(update={"properties": new_properties})
+                refreshed_case = case.model_copy(
+                    update={"state": new_state, "updated_at": utcnow()}
+                )
+                await self._cases.update_case(refreshed_case)
+                already_fired.add(index)
+
+                try:
+                    await self.execute_action(
+                        case.case_uri,
+                        spec["action"],
+                        spec.get("params", {}),
+                    )
+                    fired.append(f"{case.case_uri}#{index}")
+                except CaseManagerError as exc:
+                    logger.warning(
+                        "Timer %d on case %s failed to fire: %s",
+                        index,
+                        case.case_uri,
+                        exc,
+                    )
+        return fired
 
     # --- saga compensation -------------------------------------------------
 
@@ -463,6 +550,36 @@ class CaseManager:
         await self._cases.update_case(new_case)
         return new_case
 
+    async def create_subcase(
+        self,
+        parent_uri: str,
+        child_process_uri: str,
+        *,
+        initial_state: dict[str, Any] | None = None,
+        case_uri: str | None = None,
+    ) -> Case:
+        """Spawn a child case linked back to ``parent_uri``.
+
+        When the child closes (status → CLOSED), :meth:`execute_action`
+        projects the child's final state onto the parent under
+        ``subcase_<child_uri>_closed`` and ``subcase_<child_uri>_state`` so a
+        parent decision engine can react to the child's outcome.
+
+        Raises CaseNotFoundError / ProcessNotFoundError as applicable.
+        """
+
+        await self._require_case(parent_uri)  # rejects if parent missing
+        child = await self.create_case(
+            child_process_uri, initial_state=initial_state, case_uri=case_uri
+        )
+        attached = child.model_copy(update={"parent_uri": parent_uri})
+        await self._cases.update_case(attached)
+        logger.info("Created subcase %s under parent %s", child.case_uri, parent_uri)
+        refreshed = await self.get_case(child.case_uri)
+        if refreshed is None:  # pragma: no cover - just created
+            raise CaseNotFoundError(child.case_uri)
+        return refreshed
+
     async def fork(
         self,
         case_uri: str,
@@ -535,15 +652,22 @@ def _activity_to_result(activity: ProvOActivity) -> ActionResult:
 
 
 def _enforce_constraints(action_uri: str, process, case: Case) -> None:  # type: ignore[no-untyped-def]
-    """Check the process's mutex/requires constraints against current history.
+    """Check the process's ordering constraints against current history.
 
-    Mutex: an action cannot run if another member of one of its mutex groups
-    has already been executed in this case.
-    Requires: an action's prerequisites must all appear in case history first.
+    Supported keys (CMMN-friendly extensions; not BPMN sequence flow):
+
+    - ``mutex``: groups of mutually exclusive actions.
+    - ``requires``: prerequisite-chain — the named actions must already
+      appear in case history.
+    - ``immediately_after``: the action may only run right after the named
+      action — no other real action may have run in between (compensation
+      markers are ignored when computing "most recent").
+    - ``at_most_once``: the action may run at most once per case.
     """
 
     constraints = process.constraints or {}
     executed = {event.action_uri for event in case.history}
+    executed_in_order = [event.action_uri for event in case.history]
 
     for group in constraints.get("mutex", []) or []:
         if action_uri in group:
@@ -558,4 +682,21 @@ def _enforce_constraints(action_uri: str, process, case: Case) -> None:  # type:
     if missing:
         raise ConstraintViolationError(
             f"Requires: {action_uri} needs prerequisites {missing} which are not in case history."
+        )
+
+    expected_predecessor = (constraints.get("immediately_after") or {}).get(action_uri)
+    if expected_predecessor is not None:
+        most_recent_real = next(
+            (uri for uri in reversed(executed_in_order) if uri != COMPENSATION_ACTION_URI),
+            None,
+        )
+        if most_recent_real != expected_predecessor:
+            raise ConstraintViolationError(
+                f"Immediately-after: {action_uri} must follow {expected_predecessor} "
+                f"directly; most recent action was {most_recent_real!r}."
+            )
+
+    if action_uri in (constraints.get("at_most_once") or []) and action_uri in executed:
+        raise ConstraintViolationError(
+            f"At-most-once: {action_uri} has already run on case {case.case_uri}."
         )

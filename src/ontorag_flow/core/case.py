@@ -68,6 +68,14 @@ class Case(BaseModel):
             "update so concurrent writers detect lost updates."
         ),
     )
+    parent_uri: str | None = Field(
+        default=None,
+        description=(
+            "URI of the parent case, if this is a subcase. When the subcase "
+            "closes, the case manager projects its final state onto the parent "
+            "as `subcase_<child_uri>_closed=true` + `subcase_<child_uri>_state`."
+        ),
+    )
 
     @property
     def last_activity_uri(self) -> str | None:

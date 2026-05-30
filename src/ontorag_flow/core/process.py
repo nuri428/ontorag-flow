@@ -66,7 +66,17 @@ class ProcessDefinition(BaseModel):
         default_factory=dict,
         description=(
             "CMMN-style ordering constraints enforced at execute time. "
-            "Shape: {'mutex': [[uri_a, uri_b], ...], 'requires': {uri: [prereq_uri, ...]}}."
+            "Shape: {'mutex': [[uri_a, uri_b], ...], 'requires': {uri: [prereq_uri, ...]}, "
+            "'immediately_after': {uri: predecessor_uri}, 'at_most_once': [uri, ...]}."
+        ),
+    )
+    timer_events: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Time-driven action fires for adaptive case management. Each entry "
+            "is {'after_minutes': N, 'action': uri, 'params': {...}} — "
+            "CaseManager.tick() fires entries whose deadline has elapsed and "
+            "tracks fired indices in case state under '_timers_fired'."
         ),
     )
 

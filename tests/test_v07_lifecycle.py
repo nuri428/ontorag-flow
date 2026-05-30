@@ -186,6 +186,99 @@ async def test_requires_constraint_blocks_missing_prereq(
     assert case.state.properties["x"] == 1
 
 
+async def test_immediately_after_requires_no_intervening_action(
+    case_manager_sqlite: CaseManager,
+) -> None:
+    other = "urn:ontorag-flow:action:SetGoal"
+    process = ProcessDefinition(
+        process_uri="urn:p:imm",
+        name="Imm",
+        allowed_actions=[UPDATE, other],
+        constraints={"immediately_after": {other: UPDATE}},
+    )
+    await case_manager_sqlite.register_process(process)
+    case = await case_manager_sqlite.create_case("urn:p:imm")
+
+    with pytest.raises(ConstraintViolationError):
+        await case_manager_sqlite.execute_action(case.case_uri, other, {"predicate": "x"})
+
+    await case_manager_sqlite.execute_action(case.case_uri, UPDATE, {"key": "a", "value": 1})
+    await case_manager_sqlite.execute_action(case.case_uri, other, {"predicate": "x"})
+
+
+async def test_timer_event_fires_on_tick_when_elapsed(
+    case_manager_sqlite: CaseManager,
+) -> None:
+    manager = case_manager_sqlite
+    process = ProcessDefinition(
+        process_uri="urn:p:timer",
+        name="Timer",
+        allowed_actions=[UPDATE],
+        timer_events=[
+            {"after_minutes": 0, "action": UPDATE, "params": {"key": "timeout", "value": True}},
+        ],
+    )
+    await manager.register_process(process)
+    case = await manager.create_case("urn:p:timer")
+
+    fired = await manager.tick()
+    assert fired == [f"{case.case_uri}#0"]
+    after = await manager.get_case(case.case_uri)
+    assert after is not None
+    assert after.state.properties.get("timeout") is True
+    assert after.state.properties.get("_timers_fired") == [0]
+
+    # Second tick is a no-op — timer already fired.
+    fired_again = await manager.tick()
+    assert fired_again == []
+
+
+async def test_subcase_close_projects_state_onto_parent(
+    case_manager_sqlite: CaseManager,
+) -> None:
+    manager = case_manager_sqlite
+    parent_proc = ProcessDefinition(
+        process_uri="urn:p:parent", name="Parent", allowed_actions=[UPDATE]
+    )
+    child_proc = ProcessDefinition(
+        process_uri="urn:p:child",
+        name="Child",
+        allowed_actions=[UPDATE],
+        goal={"resolved": True},
+    )
+    await manager.register_process(parent_proc)
+    await manager.register_process(child_proc)
+    parent = await manager.create_case("urn:p:parent")
+
+    child = await manager.create_subcase(parent.case_uri, "urn:p:child")
+    assert child.parent_uri == parent.case_uri
+
+    # Drive child to close — its goal is `resolved: true`.
+    await manager.execute_action(child.case_uri, UPDATE, {"key": "resolved", "value": True})
+
+    refreshed_parent = await manager.get_case(parent.case_uri)
+    assert refreshed_parent is not None
+    assert refreshed_parent.state.properties.get(f"subcase_{child.case_uri}_closed") is True
+    assert refreshed_parent.state.properties.get(f"subcase_{child.case_uri}_state") == {
+        "resolved": True
+    }
+
+
+async def test_at_most_once_blocks_second_run(case_manager_sqlite: CaseManager) -> None:
+    process = ProcessDefinition(
+        process_uri="urn:p:once",
+        name="Once",
+        allowed_actions=[UPDATE],
+        constraints={"at_most_once": [UPDATE]},
+    )
+    await case_manager_sqlite.register_process(process)
+    case = await case_manager_sqlite.create_case("urn:p:once")
+
+    await case_manager_sqlite.execute_action(case.case_uri, UPDATE, {"key": "a", "value": 1})
+    with pytest.raises(ConstraintViolationError):
+        await case_manager_sqlite.execute_action(case.case_uri, UPDATE, {"key": "b", "value": 2})
+
+
 # --- human-in-the-loop handoff --------------------------------------------
 
 

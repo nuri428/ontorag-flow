@@ -225,6 +225,8 @@ docstrings; this section is the index.
 | `ontorag-flow case compensate` | Roll back a tail of executed actions (saga) |
 | `ontorag-flow case suspend / resume` | Pause / reopen a case |
 | `ontorag-flow case fork` | New case copying state + history from a source |
+| `ontorag-flow case subcase` | Spawn a child case under a parent (closes project onto parent state) |
+| `ontorag-flow case tick` | Fire elapsed timer events across all open cases |
 | `ontorag-flow case counterfactual` | "What if at this step we'd done Y?" via the causal engine |
 | `ontorag-flow audit show / export` | Inspect or render the PROV-O audit trail (JSON-LD / Turtle) |
 
@@ -278,6 +280,8 @@ docstrings; this section is the index.
 | `ontorag-flow case compensate` | 실행된 액션 꼬리를 saga 방식으로 롤백 |
 | `ontorag-flow case suspend / resume` | 케이스 일시 정지 / 재개 |
 | `ontorag-flow case fork` | 소스 케이스의 상태+히스토리를 복사한 새 케이스 |
+| `ontorag-flow case subcase` | 부모 아래 자식 케이스 생성 (자식 종료 시 부모 state로 투영) |
+| `ontorag-flow case tick` | 모든 열린 케이스에 대해 만기된 타이머 발화 |
 | `ontorag-flow case counterfactual` | "이 단계에서 Y였다면?"을 causal 엔진으로 |
 | `ontorag-flow audit show / export` | PROV-O 감사 trail 조회 / 렌더링 (JSON-LD · Turtle) |
 

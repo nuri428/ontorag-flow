@@ -446,7 +446,7 @@ Mirror ontorag's conventions exactly:
 
 - **Don't store domain ontology data.** TBox + ABox live in ontorag. ontorag-flow only stores process definitions, case state, and audit log. Domain queries go through MCP.
 - **Don't implement OWL reasoning, Bayesian, or causal inference.** Call ontorag's MCP tools.
-- **Don't be BPMN 2.0 compliant.** Camunda exists; we're not rebuilding it. Focus on ontology-aware adaptive case management. CMMN-*inspired* is the limit.
+- **Don't be BPMN 2.0 compliant.** Camunda exists; we're not rebuilding it. Focus on ontology-aware adaptive case management. CMMN-*inspired* is the limit. (Some borrowable concepts *complement* ACM and have been added: timer events for SLA wake-ups, subprocess for case nesting, ordering constraints like `immediately_after` / `at_most_once`. These are still CMMN-style — they extend constraints and the case lifecycle, not the decision model. BPMN sequence flow + gateways + parallel multi-instance + swimlanes + visual editor remain out of scope; they conflict with `DecisionEngine` as the runtime authority.)
 - **Don't pull in LangChain, LlamaIndex, LangGraph, or LangServe.** Direct MCP and SDK calls only — consistent with ontorag's posture.
 - **Don't hard-code decision logic in Python.** DecisionEngine is pluggable; new strategies arrive as new engine implementations.
 - **Don't allow actions with undeclared side effects.** Every action declares what it touches upfront. Hidden mutation is a reviewer-blocker.

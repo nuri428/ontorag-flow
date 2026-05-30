@@ -143,6 +143,12 @@ class ForkRequest(BaseModel):
     new_uri: str | None = None
 
 
+class SubcaseRequest(BaseModel):
+    process_uri: str
+    initial_state: dict[str, Any] = Field(default_factory=dict)
+    case_uri: str | None = None
+
+
 @router.post("/{case_uri}/compensate", operation_id="compensate_case", response_model=Case)
 async def compensate_case(
     case_uri: str,
@@ -214,6 +220,38 @@ async def counterfactual_replay(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (CounterfactualError, NoEngineConfiguredError, EngineUnavailableError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{case_uri}/subcase",
+    operation_id="create_subcase",
+    response_model=Case,
+)
+async def create_subcase(
+    case_uri: str,
+    body: SubcaseRequest,
+    manager: CaseManager = Depends(get_case_manager),
+) -> Case:
+    """Spawn a child case linked to ``case_uri`` as parent."""
+
+    try:
+        return await manager.create_subcase(
+            case_uri,
+            body.process_uri,
+            initial_state=body.initial_state,
+            case_uri=body.case_uri,
+        )
+    except (CaseNotFoundError, ProcessNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/tick", operation_id="tick_timers", response_model=list[str])
+async def tick_timers(
+    manager: CaseManager = Depends(get_case_manager),
+) -> list[str]:
+    """Fire elapsed timer events across all open cases."""
+
+    return await manager.tick()
 
 
 @router.post("/{case_uri}/fork", operation_id="fork_case", response_model=Case)
