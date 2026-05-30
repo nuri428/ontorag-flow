@@ -1,0 +1,84 @@
+# Supply-chain root-cause-analysis process.
+#
+# Where the medical-triage demo is a clean decision tree (and a rule engine
+# suffices), this domain is what the framework was actually built for:
+# evidence accumulates over time, prerequisites chain, the hypothesis space
+# is open, and at some point a human has to sign off.
+#
+# Run with:
+#   uv run python examples/supply_chain_rca/run_demo.py
+
+process_uri: "urn:ontorag-flow:process:supply-chain-rca"
+name: "Supply chain root-cause analysis"
+
+allowed_actions:
+  - "urn:demo:supply-chain:RecordEvidence"
+  - "urn:demo:supply-chain:QuerySupplier"
+  - "urn:demo:supply-chain:RouteThroughBackup"
+  - "urn:demo:supply-chain:ApproveCompensation"
+  - "urn:ontorag-flow:action:UpdateCaseProperty"   # closes the case after human resume
+
+# A case closes once RCA is marked complete by the human-reviewed wrap-up step.
+goal:
+  rca_complete: true
+
+initial_state:
+  delay_minutes: 0
+  evidence_count: 0
+  supplier_status: "unknown"
+  routing: "primary"
+
+# CMMN-style ordering constraints. Even if a rule fires, the case manager
+# refuses to execute an action whose prerequisites are not in case history.
+constraints:
+  requires:
+    "urn:demo:supply-chain:QuerySupplier":
+      - "urn:demo:supply-chain:RecordEvidence"
+    "urn:demo:supply-chain:RouteThroughBackup":
+      - "urn:demo:supply-chain:QuerySupplier"
+
+# Rule engine fallback. The same process can be driven by the LLM engine
+# instead — set `engine: llm` and `LLM_PROVIDER` and the agent will read the
+# allowed-action catalog directly.
+rules:
+  - name: "Long delay → record evidence first"
+    when:
+      delay_minutes: {gt: 60}
+      evidence_count: 0
+    then:
+      action: "urn:demo:supply-chain:RecordEvidence"
+      params:
+        note: "Shipment overdue by more than 60 minutes."
+    confidence: 0.9
+    rationale: "Every investigation starts with capturing what we observed."
+
+  - name: "Evidence captured, supplier unknown → query supplier"
+    when:
+      supplier_status: "unknown"
+      evidence_count: {gte: 1}
+    then:
+      action: "urn:demo:supply-chain:QuerySupplier"
+      params:
+        supplier_id: "SUP-42"
+    confidence: 0.85
+    rationale: "Once we have a baseline observation, probe the most likely upstream cause."
+
+  - name: "Non-responsive supplier → fall back to backup route"
+    when:
+      supplier_status: "non_responsive"
+    then:
+      action: "urn:demo:supply-chain:RouteThroughBackup"
+      params:
+        backup_id: "ROUTE-B"
+    confidence: 0.95
+    rationale: "If the primary supplier is silent, recover delivery via the contracted backup."
+
+  - name: "Backup routing → request human-approved compensation"
+    when:
+      routing: "backup"
+    then:
+      action: "urn:demo:supply-chain:ApproveCompensation"
+      params:
+        reason: "Backup routing was used; customer compensation policy requires sign-off."
+    confidence: 1.0
+    rationale: "Policy: backup-route incidents always trigger a compensation review."

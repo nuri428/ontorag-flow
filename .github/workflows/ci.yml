@@ -147,3 +147,6 @@ jobs:
 
       - name: Run medical-triage end-to-end demo
         run: uv run python examples/medical_triage/run_demo.py
+
+      - name: Run supply-chain RCA demo (auto-suspend + resume)
+        run: uv run python examples/supply_chain_rca/run_demo.py
