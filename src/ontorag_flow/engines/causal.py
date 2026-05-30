@@ -32,7 +32,7 @@ from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.engines._posteriors import extract_posterior
-from ontorag_flow.engines.base import DecisionEngine
+from ontorag_flow.engines.base import DecisionEngine, EngineExplanation
 from ontorag_flow.engines.bayesian import SupportsToolCall
 from ontorag_flow.log import get_logger
 
@@ -118,6 +118,25 @@ class CausalSimulationEngine:
             )
         proposals.sort(key=lambda proposal: proposal.confidence or 0.0, reverse=True)
         return proposals
+
+    async def explain(self, case: Case, process: ProcessDefinition) -> EngineExplanation:
+        """Same proposals plus the intervention map and interventional posteriors."""
+
+        proposals = await self.propose_next(case, process)
+        target = process.causal.get("target") if process.causal else None
+        interventions: dict[str, Any] = {}
+        if process.causal is not None:
+            config = CausalConfig.model_validate(process.causal)
+            interventions = {c.action: c.intervention for c in config.candidates}
+        return EngineExplanation(
+            engine_kind="CausalSimulationEngine",
+            proposals=proposals,
+            trace={
+                "target": target,
+                "interventions_by_action": interventions,
+                "posterior_by_action": {p.action_uri: p.confidence for p in proposals},
+            },
+        )
 
     async def score_intervention(
         self,
@@ -235,6 +254,26 @@ class StackedEngine:
             )
         rescored.sort(key=lambda proposal: proposal.confidence or 0.0, reverse=True)
         return rescored
+
+    async def explain(self, case: Case, process: ProcessDefinition) -> EngineExplanation:
+        """Show proposer's original confidences alongside the validator's rescored ones."""
+
+        proposer_original = await self._proposer.propose_next(case, process)
+        final = await self.propose_next(case, process)
+        return EngineExplanation(
+            engine_kind="StackedEngine",
+            proposals=final,
+            trace={
+                "proposer_kind": type(self._proposer).__name__,
+                "validator_kind": type(self._validator).__name__,
+                "proposer_original": [
+                    {"action": p.action_uri, "confidence": p.confidence} for p in proposer_original
+                ],
+                "validator_rescored": [
+                    {"action": p.action_uri, "confidence": p.confidence} for p in final
+                ],
+            },
+        )
 
 
 def _short(payload: dict[str, Any]) -> str:

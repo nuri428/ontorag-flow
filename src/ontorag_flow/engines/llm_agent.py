@@ -21,6 +21,7 @@ from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.core.registry import ActionRegistry
+from ontorag_flow.engines.base import EngineExplanation
 from ontorag_flow.log import get_logger
 
 logger = get_logger(__name__)
@@ -90,6 +91,37 @@ class LlmAgentEngine:
         raw = await self._client.complete(system=_SYSTEM_PROMPT, user=user_prompt)
         proposals = self._parse(raw, process)
         return proposals[: self._max_proposals]
+
+    async def explain(self, case: Case, process: ProcessDefinition) -> EngineExplanation:
+        """Same proposals plus the exact prompt and raw LLM reply.
+
+        Operators auditing an LLM-driven decision care most about the
+        prompt (what context the model saw) and the raw reply (whether
+        the parser dropped anything). Both are captured here.
+        """
+
+        if not process.allowed_actions:
+            return EngineExplanation(
+                engine_kind="LlmAgentEngine",
+                proposals=[],
+                trace={"reason": "no allowed actions in process"},
+            )
+
+        user_prompt = self._build_user_prompt(case, process)
+        raw = await self._client.complete(system=_SYSTEM_PROMPT, user=user_prompt)
+        all_parsed = self._parse(raw, process)
+        proposals = all_parsed[: self._max_proposals]
+        return EngineExplanation(
+            engine_kind="LlmAgentEngine",
+            proposals=proposals,
+            trace={
+                "system_prompt": _SYSTEM_PROMPT,
+                "user_prompt": user_prompt,
+                "raw_reply": raw,
+                "parsed_count": len(all_parsed),
+                "max_proposals": self._max_proposals,
+            },
+        )
 
     def _build_user_prompt(self, case: Case, process: ProcessDefinition) -> str:
         """Render the case, goal, and allowed-action catalog as a prompt."""

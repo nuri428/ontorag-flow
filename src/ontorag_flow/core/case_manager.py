@@ -28,7 +28,7 @@ from ontorag_flow.log import get_logger
 from ontorag_flow.stores.base import CaseStore, ProcessStore
 
 if TYPE_CHECKING:
-    from ontorag_flow.engines.base import DecisionEngine
+    from ontorag_flow.engines.base import DecisionEngine, EngineExplanation
     from ontorag_flow.engines.causal import CounterfactualResult
 
 # A factory builds a decision engine for a given process (so per-process rules
@@ -180,6 +180,44 @@ class CaseManager:
 
         engine = self._engine_factory(process)
         return await engine.propose_next(case, process)
+
+    async def explain_next(self, case_uri: str) -> EngineExplanation:
+        """Ask the decision engine for proposals *plus* a "why" trace.
+
+        Engines opt-in by implementing :meth:`explain`; those that do not
+        fall back to a no-trace explanation built from ``propose_next``.
+
+        Raises:
+            NoEngineConfiguredError: If no engine factory was provided.
+            CaseNotFoundError, ProcessNotFoundError: As applicable.
+        """
+
+        # Import inside the method to keep the core / engines layering
+        # one-way (engines depend on core; core does not depend on engines
+        # at module load time).
+        from ontorag_flow.engines.base import EngineExplanation as _Explanation
+
+        if self._engine_factory is None:
+            raise NoEngineConfiguredError("No decision engine configured for this case manager.")
+
+        case = await self.get_case(case_uri)
+        if case is None:
+            raise CaseNotFoundError(case_uri)
+        process = await self._processes.get_process(case.process_uri)
+        if process is None:
+            raise ProcessNotFoundError(case.process_uri)
+
+        engine = self._engine_factory(process)
+        explain = getattr(engine, "explain", None)
+        if explain is not None:
+            return await explain(case, process)
+        # Default explanation for engines that haven't opted in.
+        proposals = await engine.propose_next(case, process)
+        return _Explanation(
+            engine_kind=type(engine).__name__,
+            proposals=proposals,
+            trace={"note": "engine does not implement explain(); only proposals available"},
+        )
 
     async def counterfactual(
         self,

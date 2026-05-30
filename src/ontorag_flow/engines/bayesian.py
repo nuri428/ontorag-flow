@@ -39,6 +39,7 @@ from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.engines._posteriors import extract_posterior as _extract_posterior
+from ontorag_flow.engines.base import EngineExplanation
 from ontorag_flow.log import get_logger
 
 # Re-exported above for backward compatibility; the canonical helper now lives
@@ -156,3 +157,24 @@ class BayesianMpeEngine:
 
         proposals.sort(key=lambda proposal: proposal.confidence or 0.0, reverse=True)
         return proposals
+
+    async def explain(self, case: Case, process: ProcessDefinition) -> EngineExplanation:
+        """Same proposals plus a per-candidate posterior breakdown.
+
+        Re-runs ``propose_next`` (calling ontorag once per candidate) and
+        attaches the action → posterior map so the operator can see which
+        candidate dominated and by how much. There is no cached intermediate
+        state; the engine is stateless across calls by design.
+        """
+
+        proposals = await self.propose_next(case, process)
+        target = process.bayesian.get("target") if process.bayesian else None
+        return EngineExplanation(
+            engine_kind="BayesianMpeEngine",
+            proposals=proposals,
+            trace={
+                "target": target,
+                "posterior_by_action": {p.action_uri: p.confidence for p in proposals},
+                "base_evidence": dict(case.state.properties),
+            },
+        )

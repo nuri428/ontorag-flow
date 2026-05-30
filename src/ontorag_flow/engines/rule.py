@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, model_validator
 from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case
 from ontorag_flow.core.process import ProcessDefinition
+from ontorag_flow.engines.base import EngineExplanation
 from ontorag_flow.log import get_logger
 
 logger = get_logger(__name__)
@@ -120,7 +121,26 @@ class RuleEngine:
     async def propose_next(self, case: Case, process: ProcessDefinition) -> list[ActionProposal]:
         """Return proposals for every fired rule, ranked by confidence."""
 
+        proposals, _ = self._evaluate(case, process)
+        return proposals
+
+    async def explain(self, case: Case, process: ProcessDefinition) -> EngineExplanation:
+        """Same proposals plus a per-rule fired / skipped trace."""
+
+        proposals, trace = self._evaluate(case, process)
+        return EngineExplanation(
+            engine_kind="RuleEngine",
+            proposals=proposals,
+            trace=trace,
+        )
+
+    def _evaluate(
+        self, case: Case, process: ProcessDefinition
+    ) -> tuple[list[ActionProposal], dict[str, Any]]:
         proposals: list[ActionProposal] = []
+        fired: list[dict[str, Any]] = []
+        skipped_disallowed: list[str] = []
+        unmatched: list[str] = []
         for rule in self._rules:
             if not process.allows(rule.then.action):
                 logger.warning(
@@ -128,6 +148,7 @@ class RuleEngine:
                     rule.name,
                     rule.then.action,
                 )
+                skipped_disallowed.append(rule.name)
                 continue
             if _matches(rule.when, case.state.properties):
                 proposals.append(
@@ -139,5 +160,14 @@ class RuleEngine:
                         proposed_by="RuleEngine",
                     )
                 )
+                fired.append({"name": rule.name, "when": rule.when, "confidence": rule.confidence})
+            else:
+                unmatched.append(rule.name)
         proposals.sort(key=lambda proposal: proposal.confidence or 0.0, reverse=True)
-        return proposals
+        trace: dict[str, Any] = {
+            "rules_evaluated": len(self._rules),
+            "rules_fired": fired,
+            "rules_unmatched": unmatched,
+            "rules_skipped_disallowed": skipped_disallowed,
+        }
+        return proposals, trace

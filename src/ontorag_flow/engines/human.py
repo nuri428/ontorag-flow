@@ -12,6 +12,7 @@ from ontorag_flow.actions.human import RequestHumanReview
 from ontorag_flow.core.action import ActionProposal
 from ontorag_flow.core.case import Case
 from ontorag_flow.core.process import ProcessDefinition
+from ontorag_flow.engines.base import EngineExplanation
 
 __all__ = ["HumanReviewEngine"]
 
@@ -29,3 +30,13 @@ class HumanReviewEngine:
                 proposed_by="HumanReviewEngine",
             )
         ]
+
+    async def explain(self, case: Case, process: ProcessDefinition) -> EngineExplanation:
+        """Trivial explanation — the recommendation is unconditional by design."""
+
+        proposals = await self.propose_next(case, process)
+        return EngineExplanation(
+            engine_kind="HumanReviewEngine",
+            proposals=proposals,
+            trace={"policy": "always defer to human; no inputs consulted"},
+        )
