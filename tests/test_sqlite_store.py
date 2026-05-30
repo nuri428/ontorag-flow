@@ -95,6 +95,23 @@ async def test_optimistic_lock_blocks_stale_update(sqlite_store: SqliteStore) ->
     assert final is not None and final.version == 2 and final.status is CaseStatus.CLOSED
 
 
+async def test_list_by_case_supports_limit_and_offset(sqlite_store: SqliteStore) -> None:
+    case_uri = "urn:c:paging"
+    for i in range(5):
+        await sqlite_store.record(ProvOActivity(action_uri=f"urn:act:{i}", case_uri=case_uri))
+
+    assert len(await sqlite_store.list_by_case(case_uri)) == 5
+    assert len(await sqlite_store.list_by_case(case_uri, limit=2)) == 2
+
+    # offset alone (no limit) skips the first n
+    skipped = await sqlite_store.list_by_case(case_uri, offset=3)
+    assert [a.action_uri for a in skipped] == ["urn:act:3", "urn:act:4"]
+
+    # limit + offset window
+    window = await sqlite_store.list_by_case(case_uri, limit=2, offset=1)
+    assert [a.action_uri for a in window] == ["urn:act:1", "urn:act:2"]
+
+
 async def test_activity_roundtrip_filtered_by_case(sqlite_store: SqliteStore) -> None:
     a1 = ProvOActivity(action_uri="urn:act:1", case_uri="urn:c:1")
     a2 = ProvOActivity(action_uri="urn:act:2", case_uri="urn:c:2")

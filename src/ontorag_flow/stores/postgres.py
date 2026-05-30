@@ -50,7 +50,9 @@ _SCHEMA_STATEMENTS = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status)",
     "CREATE INDEX IF NOT EXISTS idx_cases_process ON cases(process_uri)",
-    "CREATE INDEX IF NOT EXISTS idx_activities_case ON activities(case_uri)",
+    # Composite serves both "all activities for a case" and the ORDER BY seq
+    # scan that case-manager hydration depends on (P5).
+    "CREATE INDEX IF NOT EXISTS idx_activities_case_seq ON activities(case_uri, seq)",
 )
 
 
@@ -192,10 +194,22 @@ class PostgresStore:
         rows = await self._c.fetch("SELECT data FROM activities ORDER BY seq")
         return [ProvOActivity.model_validate_json(r["data"]) for r in rows]
 
-    async def list_by_case(self, case_uri: str) -> list[ProvOActivity]:
-        rows = await self._c.fetch(
-            "SELECT data FROM activities WHERE case_uri = $1 ORDER BY seq", case_uri
-        )
+    async def list_by_case(
+        self,
+        case_uri: str,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[ProvOActivity]:
+        query = "SELECT data FROM activities WHERE case_uri = $1 ORDER BY seq"
+        args: list = [case_uri]
+        if limit is not None:
+            args.extend([limit, offset])
+            query += f" LIMIT ${len(args) - 1} OFFSET ${len(args)}"
+        elif offset > 0:
+            args.append(offset)
+            query += f" OFFSET ${len(args)}"
+        rows = await self._c.fetch(query, *args)
         return [ProvOActivity.model_validate_json(r["data"]) for r in rows]
 
     async def get(self, activity_uri: str) -> ProvOActivity | None:

@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS activities (
 );
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE INDEX IF NOT EXISTS idx_cases_process ON cases(process_uri);
+-- SQLite uses its implicit rowid for ORDER BY when filtered by an
+-- indexed column; the single-column index here covers
+-- ``WHERE case_uri = ? ORDER BY rowid`` (which case-manager hydration
+-- relies on after P5). Postgres uses a composite (case_uri, seq) index
+-- in its schema because BIGSERIAL needs explicit help.
 CREATE INDEX IF NOT EXISTS idx_activities_case ON activities(case_uri);
 """
 
@@ -186,11 +191,23 @@ class SqliteStore:
             rows = await cursor.fetchall()
         return [ProvOActivity.model_validate_json(r["data"]) for r in rows]
 
-    async def list_by_case(self, case_uri: str) -> list[ProvOActivity]:
-        async with self._conn.execute(
-            "SELECT data FROM activities WHERE case_uri = ? ORDER BY rowid",
-            (case_uri,),
-        ) as cursor:
+    async def list_by_case(
+        self,
+        case_uri: str,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[ProvOActivity]:
+        query = "SELECT data FROM activities WHERE case_uri = ? ORDER BY rowid"
+        params: list = [case_uri]
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        elif offset > 0:
+            # SQLite needs a LIMIT clause for OFFSET to apply; -1 means "no limit".
+            query += " LIMIT -1 OFFSET ?"
+            params.append(offset)
+        async with self._conn.execute(query, params) as cursor:
             rows = await cursor.fetchall()
         return [ProvOActivity.model_validate_json(r["data"]) for r in rows]
 
