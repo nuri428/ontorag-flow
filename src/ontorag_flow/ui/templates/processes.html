@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Processes — ontorag-flow{% endblock %}
+{% block content %}
+<h1>Processes</h1>
+<p class="muted">{{ rows | length }} loaded process definition(s).</p>
+
+{% if not rows %}
+  <div class="callout empty">
+    No processes loaded. Use
+    <code>ontorag-flow process load &lt;path&gt;</code>
+    or POST to <code>/processes</code>.
+  </div>
+{% else %}
+<table>
+  <thead><tr>
+    <th>Process</th><th>Name</th><th>Allowed actions</th>
+    <th>Cases</th><th>Open</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td class="uri">{{ row.process.process_uri }}</td>
+      <td>{{ row.process.name }}</td>
+      <td>{{ row.process.allowed_actions | length }}</td>
+      <td>{{ row.case_count }}</td>
+      <td><span class="badge open">{{ row.open_count }}</span></td>
+      <td><a href="/ui/processes/{{ row.process.process_uri }}">inspect →</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

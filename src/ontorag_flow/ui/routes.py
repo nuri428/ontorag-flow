@@ -42,6 +42,158 @@ def _ctx(**extra: Any) -> dict[str, Any]:
     return {"version": __version__, **extra}
 
 
+def _build_process_svg(process: Any) -> str:
+    """Render a CMMN-style diagram of a process as inline SVG (no JS, no chart lib).
+
+    Layout:
+      - Each allowed action becomes a rounded rectangle node, arranged in a
+        grid of three columns.
+      - ``constraints.requires[a] = [b]``        → arrow b → a labeled "requires".
+      - ``constraints.immediately_after[a] = b`` → arrow b → a labeled "→".
+      - ``constraints.mutex = [[a, b]]``         → dashed double-headed line.
+      - ``constraints.at_most_once = [a]``       → "×1" badge on the node.
+      - ``timer_events``                         → small clock node above the
+        target action with an arrow into it.
+
+    The function is pure and returns the SVG markup as a string so the
+    template inlines it (``{{ svg | safe }}``). Strings are HTML-escaped at
+    insertion to defuse process URIs that happen to contain ``<`` or ``&``.
+    """
+
+    from html import escape
+
+    cols = 3
+    node_w, node_h = 220, 56
+    gap_x, gap_y = 60, 90
+    pad = 30
+
+    actions = list(process.allowed_actions or [])
+    constraints = process.constraints or {}
+    timer_events = process.timer_events or []
+    at_most_once = set(constraints.get("at_most_once") or [])
+    requires = constraints.get("requires") or {}
+    immediately_after = constraints.get("immediately_after") or {}
+    mutex_pairs = constraints.get("mutex") or []
+
+    positions: dict[str, tuple[int, int]] = {}
+    for index, action_uri in enumerate(actions):
+        row, col = divmod(index, cols)
+        x = pad + col * (node_w + gap_x)
+        y = pad + row * (node_h + gap_y)
+        positions[action_uri] = (x, y)
+
+    timer_targets = {entry.get("action") for entry in timer_events if isinstance(entry, dict)}
+    rows = (len(actions) + cols - 1) // cols if actions else 1
+    width = pad * 2 + cols * node_w + (cols - 1) * gap_x
+    height = pad * 2 + rows * (node_h + gap_y)
+
+    def _short(uri: str) -> str:
+        return uri.rsplit(":", 1)[-1] or uri
+
+    def _center(uri: str) -> tuple[int, int]:
+        x, y = positions[uri]
+        return x + node_w // 2, y + node_h // 2
+
+    parts: list[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
+        f'role="img" aria-label="Process diagram for {escape(process.process_uri)}">'
+    ]
+    # arrow-head marker
+    parts.append(
+        '<defs><marker id="arrow" viewBox="0 -5 10 10" refX="10" refY="0" '
+        'markerWidth="6" markerHeight="6" orient="auto">'
+        '<path d="M0,-5L10,0L0,5" fill="#57606a"/></marker></defs>'
+    )
+
+    # constraint edges first so node rects overlay them
+    for target, prereqs in requires.items():
+        if target not in positions:
+            continue
+        for prereq in prereqs or []:
+            if prereq not in positions:
+                continue
+            sx, sy = _center(prereq)
+            tx, ty = _center(target)
+            parts.append(
+                f'<line x1="{sx}" y1="{sy}" x2="{tx}" y2="{ty}" stroke="#0969da" '
+                f'stroke-width="1.4" marker-end="url(#arrow)"/>'
+                f'<text x="{(sx + tx) // 2}" y="{(sy + ty) // 2 - 4}" '
+                f'fill="#0969da" font-size="11" text-anchor="middle">requires</text>'
+            )
+
+    for target, prereq in immediately_after.items():
+        if target not in positions or prereq not in positions:
+            continue
+        sx, sy = _center(prereq)
+        tx, ty = _center(target)
+        parts.append(
+            f'<line x1="{sx}" y1="{sy}" x2="{tx}" y2="{ty}" stroke="#1a7f37" '
+            f'stroke-width="1.6" marker-end="url(#arrow)"/>'
+            f'<text x="{(sx + tx) // 2}" y="{(sy + ty) // 2 - 4}" '
+            f'fill="#1a7f37" font-size="11" text-anchor="middle">immediately after</text>'
+        )
+
+    for pair in mutex_pairs:
+        if not isinstance(pair, list) or len(pair) != 2:
+            continue
+        a, b = pair
+        if a not in positions or b not in positions:
+            continue
+        ax, ay = _center(a)
+        bx, by = _center(b)
+        parts.append(
+            f'<line x1="{ax}" y1="{ay}" x2="{bx}" y2="{by}" stroke="#cf222e" '
+            f'stroke-width="1.4" stroke-dasharray="6,4"/>'
+            f'<text x="{(ax + bx) // 2}" y="{(ay + by) // 2 - 4}" '
+            f'fill="#cf222e" font-size="11" text-anchor="middle">mutex</text>'
+        )
+
+    # action nodes
+    for action_uri, (x, y) in positions.items():
+        label = escape(_short(action_uri))
+        full = escape(action_uri)
+        once_badge = (
+            f'<text x="{x + node_w - 8}" y="{y + 14}" fill="#9a6700" '
+            f'font-size="11" text-anchor="end">×1</text>'
+            if action_uri in at_most_once
+            else ""
+        )
+        parts.append(
+            f"<g><title>{full}</title>"
+            f'<rect x="{x}" y="{y}" rx="8" ry="8" width="{node_w}" height="{node_h}" '
+            f'fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>'
+            f'<text x="{x + node_w // 2}" y="{y + node_h // 2 + 4}" '
+            f'text-anchor="middle" font-size="13" fill="#1f2328">{label}</text>'
+            f"{once_badge}"
+            f"</g>"
+        )
+
+    # timer event nodes (above target action with an arrow in)
+    for index, entry in enumerate(timer_events):
+        if not isinstance(entry, dict):
+            continue
+        target = entry.get("action")
+        if target not in positions:
+            continue
+        tx, ty = _center(target)
+        timer_x = positions[target][0] + index * 18
+        timer_y = positions[target][1] - 38
+        after = entry.get("after_minutes", 0)
+        parts.append(
+            f"<g><title>fires after {escape(str(after))} minutes</title>"
+            f'<circle cx="{timer_x + 12}" cy="{timer_y + 12}" r="12" '
+            f'fill="#fff8c5" stroke="#d4a72c" stroke-width="1.4"/>'
+            f'<text x="{timer_x + 12}" y="{timer_y + 16}" text-anchor="middle" '
+            f'font-size="10" fill="#7a4f01">⏱</text>'
+            f'<line x1="{timer_x + 12}" y1="{timer_y + 24}" x2="{tx}" y2="{ty}" '
+            f'stroke="#d4a72c" stroke-width="1.2" marker-end="url(#arrow)"/>'
+            f"</g>"
+        )
+
+    parts.append("</svg>")
+    return "".join(parts)
+
+
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard(
     request: Request,
@@ -82,6 +234,94 @@ async def ui_tick(
             f"/ui/?error={quote(f'{type(exc).__name__}: {exc}')}", status_code=303
         )
     return RedirectResponse(f"/ui/?ticked={len(fired)}", status_code=303)
+
+
+@router.get("/processes", response_class=HTMLResponse, include_in_schema=False)
+async def processes_page(
+    request: Request, manager: CaseManager = Depends(get_case_manager)
+) -> HTMLResponse:
+    """List loaded process definitions with quick stats."""
+
+    processes = await manager.list_processes()
+    rows = []
+    for process in processes:
+        cases = await manager.find_cases(process_uri=process.process_uri)
+        rows.append(
+            {
+                "process": process,
+                "case_count": len(cases),
+                "open_count": sum(1 for case in cases if case.status.value == "open"),
+            }
+        )
+    return templates.TemplateResponse(request, "processes.html", _ctx(rows=rows))
+
+
+@router.get(
+    "/processes/{process_uri}/diagram",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def process_diagram(
+    request: Request,
+    process_uri: str,
+    manager: CaseManager = Depends(get_case_manager),
+) -> HTMLResponse:
+    """CMMN-style inline SVG of allowed actions + constraints + timer events.
+
+    No external JS / no chart library — the SVG is built from the process
+    definition's data in :func:`_build_process_svg` and inlined into the
+    template. Layout is a simple grid (actions in rows of 3), constraints
+    overlaid as labeled edges.
+    """
+
+    process = await manager.get_process(process_uri)
+    if process is None:
+        raise HTTPException(status_code=404, detail=f"No such process: {process_uri}")
+    svg = _build_process_svg(process)
+    return templates.TemplateResponse(
+        request, "process_diagram.html", _ctx(process=process, svg=svg)
+    )
+
+
+@router.get("/processes/{process_uri}", response_class=HTMLResponse, include_in_schema=False)
+async def process_detail(
+    request: Request,
+    process_uri: str,
+    manager: CaseManager = Depends(get_case_manager),
+    store=Depends(get_store),
+) -> HTMLResponse:
+    """Single-process analytics — status mix, hottest actions, average history length."""
+
+    from collections import Counter
+
+    process = await manager.get_process(process_uri)
+    if process is None:
+        raise HTTPException(status_code=404, detail=f"No such process: {process_uri}")
+
+    cases = await manager.find_cases(process_uri=process_uri)
+    case_uris = {case.case_uri for case in cases}
+
+    activities = await store.list_all()
+    activities = [activity for activity in activities if activity.case_uri in case_uris]
+
+    status_counts = Counter(case.status.value for case in cases)
+    action_counts = Counter(activity.action_uri for activity in activities)
+    history_lengths = [len(case.history) for case in cases]
+    avg_history = sum(history_lengths) / len(history_lengths) if history_lengths else 0.0
+
+    return templates.TemplateResponse(
+        request,
+        "process_detail.html",
+        _ctx(
+            process=process,
+            case_count=len(cases),
+            status_counts=dict(status_counts),
+            top_actions=action_counts.most_common(10),
+            activity_count=len(activities),
+            avg_history=avg_history,
+            max_history=max(history_lengths) if history_lengths else 0,
+        ),
+    )
 
 
 @router.get("/actions", response_class=HTMLResponse, include_in_schema=False)

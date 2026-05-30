@@ -418,6 +418,67 @@ def test_ui_audit_404_for_unknown_case(client: TestClient) -> None:
     assert client.get("/ui/cases/urn:nope/audit").status_code == 404
 
 
+def test_ui_processes_page_lists_loaded_processes(client: TestClient) -> None:
+    client.post("/processes", json=PROCESS)
+    body = client.get("/ui/processes").text
+    assert "Processes" in body
+    assert PROCESS["process_uri"] in body
+    assert PROCESS["name"] in body
+
+
+def test_ui_processes_page_empty_state(client: TestClient) -> None:
+    body = client.get("/ui/processes").text
+    assert "No processes loaded" in body
+
+
+def test_ui_process_detail_shows_status_and_action_stats(client: TestClient) -> None:
+    client.post("/processes", json=PROCESS)
+    case_uri = client.post("/cases", json={"process_uri": "urn:p:ui"}).json()["case_uri"]
+    client.post(
+        f"/cases/{case_uri}/execute",
+        json={"action_uri": UPDATE, "params": {"key": "a", "value": 1}},
+    )
+    body = client.get(f"/ui/processes/{PROCESS['process_uri']}").text
+    assert "process inspector" in body.lower() or "process &lt;" in body or "Process " in body
+    # status mix: 1 open
+    assert "open" in body
+    # top fired actions table includes UPDATE
+    assert UPDATE in body
+
+
+def test_ui_process_detail_404_for_unknown(client: TestClient) -> None:
+    assert client.get("/ui/processes/urn:nope").status_code == 404
+
+
+def test_ui_process_diagram_renders_svg_with_action_nodes(client: TestClient) -> None:
+    proc = {
+        "process_uri": "urn:p:diagram",
+        "name": "Diagram",
+        "allowed_actions": [UPDATE, "urn:a:order_lab"],
+        "constraints": {
+            "requires": {"urn:a:order_lab": [UPDATE]},
+            "mutex": [[UPDATE, "urn:a:order_lab"]],
+            "at_most_once": [UPDATE],
+        },
+        "timer_events": [{"after_minutes": 30, "action": UPDATE, "params": {"key": "k"}}],
+    }
+    client.post("/processes", json=proc)
+    body = client.get("/ui/processes/urn:p:diagram/diagram").text
+    # SVG markup present
+    assert "<svg" in body
+    # constraint labels surface in the SVG text content
+    assert "requires" in body
+    assert "mutex" in body
+    # timer event glyph
+    assert "⏱" in body
+    # at-most-once badge
+    assert "×1" in body
+
+
+def test_ui_process_diagram_404_for_unknown(client: TestClient) -> None:
+    assert client.get("/ui/processes/urn:nope/diagram").status_code == 404
+
+
 def test_ui_subcase_bad_process_redirects_with_error(client: TestClient) -> None:
     parent_uri = _open_case(client)
     resp = client.post(

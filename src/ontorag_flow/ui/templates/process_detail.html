@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ process.name }} — process inspector{% endblock %}
+{% block content %}
+<h1>Process <code class="uri">{{ process.process_uri }}</code></h1>
+<p class="muted">
+  <a href="/ui/processes">all processes</a> ·
+  <a href="/ui/processes/{{ process.process_uri }}/diagram">diagram →</a>
+</p>
+
+<dl class="kv">
+  <dt>Name</dt><dd>{{ process.name }}</dd>
+  <dt>Engine</dt><dd>{{ process.engine or '(inferred)' }}</dd>
+  <dt>Allowed actions</dt><dd>{{ process.allowed_actions | length }}</dd>
+  <dt>Cases</dt><dd>{{ case_count }}</dd>
+  <dt>Total activities</dt><dd>{{ activity_count }}</dd>
+  <dt>Avg history / case</dt>
+  <dd>{{ '%.1f' | format(avg_history) }} (max {{ max_history }})</dd>
+</dl>
+
+<h2>Case status distribution</h2>
+{% if not status_counts %}
+  <div class="callout empty">No cases yet for this process.</div>
+{% else %}
+<table>
+  <thead><tr><th>Status</th><th>Count</th></tr></thead>
+  <tbody>
+  {% for status in ('open', 'suspended', 'closed', 'failed') %}
+    {% set n = status_counts.get(status, 0) %}
+    {% if n %}
+      <tr>
+        <td><span class="badge {{ status }}">{{ status }}</span></td>
+        <td>{{ n }}</td>
+      </tr>
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Top fired actions</h2>
+{% if not top_actions %}
+  <div class="callout empty">No activities recorded yet for cases of this process.</div>
+{% else %}
+<table>
+  <thead><tr><th>Action</th><th>Count</th></tr></thead>
+  <tbody>
+  {% for action_uri, count in top_actions %}
+    <tr>
+      <td class="uri">{{ action_uri }}</td>
+      <td>{{ count }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2>Allowed actions</h2>
+<ul>
+  {% for uri in process.allowed_actions %}
+  <li class="uri">{{ uri }}</li>
+  {% endfor %}
+</ul>
+{% endblock %}

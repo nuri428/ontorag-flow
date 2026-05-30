@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Diagram — {{ process.name }}{% endblock %}
+{% block content %}
+<h1>Process diagram</h1>
+<p class="muted">
+  <a href="/ui/processes/{{ process.process_uri }}">← back to {{ process.name }}</a> ·
+  Allowed actions as nodes; <span style="color:#0969da">requires</span>,
+  <span style="color:#1a7f37">immediately-after</span>,
+  <span style="color:#cf222e">mutex</span> as edges;
+  <span style="color:#7a4f01">⏱</span> timer events above their target.
+  Hover any shape for the full URI.
+</p>
+
+<div style="overflow-x:auto; border:1px solid var(--border); border-radius:6px; padding:0.5rem; background: var(--soft);">
+  {{ svg | safe }}
+</div>
+
+{% if not process.allowed_actions %}
+  <div class="callout">This process declares no allowed actions yet — the diagram is empty.</div>
+{% endif %}
+{% endblock %}
