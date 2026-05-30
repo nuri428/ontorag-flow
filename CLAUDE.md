@@ -498,61 +498,51 @@ When unsure about scope:
 | v0.8 | v0.8 (Causal) | CausalSimulationEngine, do-calculus pre-flight |
 | v1.0 | v0.9+ | demo on all three backends (Fuseki/Neo4j/FalkorDB) |
 
-## Known risks (decide for v1.x)
+## Known risks (decisions)
 
 Carried over from a premortem after the v0.1–v0.9 build. P2/P3/P6 were
-addressed; P5 and P7 need a design decision before code, so they are parked
-here rather than silently chosen.
+addressed directly; P5 and P7 were parked for a design decision and have
+since been **implemented** — recorded below for the next reader.
 
-### P5 — Case history bloat for long-running cases
+### P5 — Case history bloat for long-running cases — **DECIDED: Mitigation A**
 
-A case that runs for weeks accumulates 10⁴+ events. `Case.history` is a
-tuple serialised as JSON into the single `cases.data` column, so each
-`update_case` rewrites the whole row — quadratic write cost over the
-lifetime of the case.
+> A case that runs for weeks accumulates 10⁴+ events. The original design
+> serialised `Case.history` into the single `cases.data` column, so each
+> `update_case` rewrote the whole row — quadratic write cost over the
+> lifetime of the case.
 
-**Mitigation A (preferred, breaking)** — make the `activities` table the
-authoritative history and turn `Case.history` into a lazy view computed
-from `audit_store.list_by_case(case_uri)`. Case rows shrink to constant
-size. Requires:
-- Removing `history` from the persisted Case schema (migration: drop the
-  field from `cases.data` on read, or leave it as a deprecated cache).
-- Adding a `seq` join so events come back in deterministic order.
-- Updating compensation to walk the activities table instead of
-  `case.history`.
+**Implementation (non-breaking)**: the `activities` table is now the
+authority. `Case.history` stays on the in-memory model so callers
+(compensation, UI, demos, API responses) read it naturally, but stores
+exclude it when persisting via `Case.persistable_json()`.
+`CaseManager.get_case` / `find_cases` rehydrate history from
+`audit_store.list_by_case(case_uri)` on load — and old rows whose
+`cases.data` JSON still has history get refreshed from audit on the next
+load, then re-saved without it. No migration needed.
 
-**Mitigation B (simpler, lossy)** — cap `Case.history` at a fixed window
-(say last N=1000 events); drop the oldest from the in-case tuple while
-the audit retains everything. Compensate can only target events still in
-the window; older events would need explicit fetch from the audit store.
+Side effect (intended): the history now shows *every* recorded activity,
+including compensation markers, instead of being trimmed by
+`CaseManager.compensate`. Operators wanted the full trail anyway.
 
-Decision needed: A is correct; B is cheap. A wins for v1.x if the
-medical_triage demo will exercise long cases.
+### P7 — Audit recording failure can orphan external side effects — **DECIDED: write-ahead, side-effect-aware**
 
-### P7 — Audit recording failure can orphan external side effects
+> The executor used to run the action and *then* record the activity. An
+> audit failure between the external effect and the record would leave a
+> permanent side effect with no provenance.
 
-`executor.execute` runs the action first, then awaits
-`audit_store.record(activity)`. If the audit write fails (disk full, DB
-down) *after* the external side effect succeeded, the caller sees an
-exception, the side effect is permanent, and there is no provenance —
-which is exactly the case the audit was built for.
+**Implementation**: `ProvOActivity.status: Literal["pending","completed","failed"]`
+with default `"completed"` (so existing rows deserialize as completed —
+matches their meaning). The executor records a `"pending"` row *before*
+calling `action.execute` only when the action declares an
+**externally-visible** side effect (`EXTERNAL_API`, `ABOX_WRITE`, or
+`HUMAN`). On completion it upserts the same `activity_uri` to
+`"completed"` or `"failed"`. `CASE_STATE`-only actions keep the single
+write path — for them the "external effect" is just our own state, and
+the extra write isn't worth the cost.
 
-**Mitigation (write-ahead audit)** — record a `status: "pending"` activity
-*before* `action.execute`, then update it to `"completed"` or `"failed"`
-afterwards. If the post-execute update fails, the activity stays
-`"pending"`: a reaper job (or operator) can reconcile.
-
-Requires:
-- A new `status: Literal["pending","completed","failed"] = "completed"`
-  field on `ProvOActivity` (default keeps existing rows compatible).
-- Two writes per action instead of one (cost: ~1 SQLite/PG INSERT each).
-- A compensation rule: pending activities older than X minutes are surfaced
-  for review rather than retried.
-
-Decision needed: worth the extra write? Probably yes for `EXTERNAL_API` /
-`ABOX_WRITE` actions, optional for `CASE_STATE`-only actions where the
-"external effect" is just our own state. A side-effect-aware policy would
-let the executor pick.
+A pending activity that never reaches a final state is left for an
+operator (or a future reaper job) to reconcile — explicitly visible
+rather than silently lost.
 
 ## License
 

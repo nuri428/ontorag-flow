@@ -12,7 +12,7 @@ from __future__ import annotations
 import abc
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, ClassVar, Protocol, runtime_checkable
+from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -101,6 +101,15 @@ class ProvOActivity(BaseModel):
     )
     goal_before: dict[str, Any] | None = Field(
         default=None, description="Case goal snapshot taken before the action ran."
+    )
+    status: Literal["pending", "completed", "failed"] = Field(
+        default="completed",
+        description=(
+            "Lifecycle marker for write-ahead audit (P7). 'pending' rows are "
+            "recorded *before* an externally-visible action runs; the executor "
+            "upserts the same row to 'completed' or 'failed' once it knows the "
+            "outcome. Default 'completed' keeps existing rows backward-compatible."
+        ),
     )
     success: bool = True
     error: str | None = None

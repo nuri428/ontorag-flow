@@ -19,12 +19,28 @@ from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
 
-from ontorag_flow.core.action import Action, ActionResult, ProvOActivity, utcnow
+from ontorag_flow.core.action import (
+    Action,
+    ActionResult,
+    ProvOActivity,
+    SideEffectKind,
+    utcnow,
+)
 from ontorag_flow.core.audit import AuditStore, InMemoryAuditStore
 from ontorag_flow.core.state import CaseState
 from ontorag_flow.log import get_logger
 
 logger = get_logger(__name__)
+
+# P7: actions with any of these side effects do something externally visible
+# (HTTP call, ABox write, human notification). For those we record a "pending"
+# activity *before* the action runs, then upsert the same row to completed/
+# failed once we know the outcome — so an audit-store outage between
+# "external effect happened" and "we tried to log it" can't orphan the
+# external effect. CASE_STATE-only / NONE actions keep the single-write path.
+_EXTERNALLY_VISIBLE_EFFECTS: frozenset[SideEffectKind] = frozenset(
+    {SideEffectKind.EXTERNAL_API, SideEffectKind.ABOX_WRITE, SideEffectKind.HUMAN}
+)
 
 
 class ActionValidationError(Exception):
@@ -110,6 +126,32 @@ class ActionExecutor:
             raise ActionValidationError(f"Precondition failed for {action.uri}")
 
         started_at = utcnow()
+        common_audit_fields: dict[str, Any] = {
+            "case_uri": state.case_uri,
+            "state_before": dict(state.properties),
+            "goal_before": dict(state.goal) if state.goal is not None else None,
+            "agent": self.agent,
+            "started_at": started_at,
+            "used": params.model_dump(mode="json"),
+            "informed_by": informed_by,
+        }
+
+        # P7: for externally-visible actions, record a pending row first and
+        # carry its activity_uri forward so the post-execute write upserts the
+        # same row. CASE_STATE-only actions use a single write (today's path).
+        write_ahead = bool(action.side_effects & _EXTERNALLY_VISIBLE_EFFECTS)
+        pending_uri: str | None = None
+        if write_ahead:
+            pending = action.audit_record(ActionResult(action_uri=action.uri)).model_copy(
+                update={
+                    **common_audit_fields,
+                    "status": "pending",
+                    "success": False,
+                }
+            )
+            await self.audit_store.record(pending)
+            pending_uri = pending.activity_uri
+
         try:
             result = await action.execute(params, state)
         except Exception as exc:  # noqa: BLE001 — failed attempts must be audited
@@ -120,18 +162,14 @@ class ActionExecutor:
             new_state = state.apply(result)
         ended_at = utcnow()
 
-        activity = action.audit_record(result).model_copy(
-            update={
-                "case_uri": state.case_uri,
-                "state_before": dict(state.properties),
-                "goal_before": dict(state.goal) if state.goal is not None else None,
-                "agent": self.agent,
-                "started_at": started_at,
-                "ended_at": ended_at,
-                "used": params.model_dump(mode="json"),
-                "informed_by": informed_by,
-            }
-        )
+        final_update: dict[str, Any] = {
+            **common_audit_fields,
+            "ended_at": ended_at,
+            "status": "completed" if result.success else "failed",
+        }
+        if pending_uri is not None:
+            final_update["activity_uri"] = pending_uri  # upsert the pending row
+        activity = action.audit_record(result).model_copy(update=final_update)
         await self.audit_store.record(activity)
 
         return ExecutionOutcome(result=result, state=new_state, activity=activity)
