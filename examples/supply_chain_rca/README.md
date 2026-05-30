@@ -59,8 +59,35 @@ richer rationales than the rule engine's terse one-liners.
 
 In **live mode** the real Anthropic / OpenAI / Ollama SDK is called.
 
-In both modes the CMMN constraints (`requires`) are still enforced by
-the case manager, so the LLM can't skip steps even if it tries.
+### What changes between fake and live
+
+| | fake mode (deterministic) | live mode (real LLM) |
+|---|---|---|
+| Reasoning shape | Hand-written `if/elif` against the parsed prompt | Free-form generation conditioned on the action catalog |
+| Output stability | Identical bytes every run | Non-deterministic by default (temperature, sampling) |
+| Rationale text | Static LLM-ish prose per branch | Genuinely written per call, may surface unexpected angles |
+| When the engine picks a wrong action | Won't — the fake is hard-coded | Possible — the agent might confabulate |
+| Cost / latency | 0 ms, $0 | network round-trip + token charges |
+| Use it for | CI, local development, demos | benchmarking, real engagements |
+
+### What's still enforced regardless of mode
+
+Three pieces of the framework are *not* the engine's responsibility, and
+they catch the most common LLM failure modes for free:
+
+- **Unknown `action_uri`** — the LLM occasionally hallucinates an action
+  outside the process's allowed set. `LlmAgentEngine._parse` filters them
+  out before the proposal even reaches the case manager.
+- **Malformed JSON** — code fences, prose preamble, trailing
+  commentary. `_extract_json_array` strips fences and walks the prose
+  looking for a bracketed array, then tolerantly parses each entry.
+- **Prerequisite violations** — even if the LLM proposes
+  `RouteThroughBackup` before `QuerySupplier`, `CaseManager.execute_action`
+  refuses with `ConstraintViolationError` because of the `requires`
+  block in `process.yaml`. The engine is policy; constraints are law.
+
+The combination means a *worst-case* LLM session just fails actions
+that violate contracts — it can't push the case into an invalid state.
 
 `run_demo_llm.py` demonstrates the key claim of the framework: *process
 definition is data, engine is policy.* The same `process.yaml` runs
