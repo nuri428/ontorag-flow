@@ -73,7 +73,7 @@ auto-close on goal satisfaction, and exports a PROV-O Turtle audit trail.
 | `CausalSimulationEngine` | `P(goal \| do(intervention))` — Pearl Rung 2 | ontorag MCP (v0.8) | `causal:` |
 | `LlmAgentEngine` | LLM reasoning over case state + action catalog (Anthropic / OpenAI / Ollama) | LLM SDK | `engine: llm` |
 | `HumanReviewEngine` | always defer to a human; the resulting `RequestHumanReview` action auto-suspends the case | none | `engine: human` |
-| `StackedEngine` | composes a proposer (LLM / Bayesian) with the causal engine as final validator | both | (programmatic) |
+| `StackedEngine` | composes a proposer (rule / bayesian / llm / human) with the causal engine as final validator | proposer's client + ontorag MCP (v0.8) | `engine: stacked` + `arbitration: {proposer, validator}` |
 
 Pick explicitly with `engine: <kind>` in the process YAML, or let the
 resolver infer (`causal:` present → causal, `bayesian:` → bayesian,
@@ -239,7 +239,7 @@ docstrings; this section is the index.
 | `CausalSimulationEngine` | Need interventional `P(goal \| do(...))` — Pearl Rung 2 | ontorag MCP (v0.8) |
 | `LlmAgentEngine` | Open-ended hypothesis space; free-form reasoning | Anthropic / OpenAI / Ollama |
 | `HumanReviewEngine` | Always defer to a human reviewer | none |
-| `StackedEngine` | Compose proposer + causal validator (causal overrides confidence with do-effect) | both |
+| `StackedEngine` | Compose proposer + causal validator — declare in YAML with `engine: stacked` + `arbitration: {proposer: rule\|bayesian\|llm\|human, validator: causal}` | proposer's client + ontorag MCP |
 
 #### Built-in actions
 
@@ -296,7 +296,7 @@ docstrings; this section is the index.
 | `CausalSimulationEngine` | 개입적 `P(goal \| do(...))` 필요 — Pearl Rung 2 | ontorag MCP (v0.8) |
 | `LlmAgentEngine` | 개방형 가설 공간, 자유로운 추론 | Anthropic / OpenAI / Ollama |
 | `HumanReviewEngine` | 항상 사람 검토자에게 위임 | 없음 |
-| `StackedEngine` | 제안 엔진 + causal 검증자 합성 (causal이 do-effect로 confidence 덮어쓰기) | 양쪽 모두 |
+| `StackedEngine` | proposer + causal validator 합성 — YAML에 `engine: stacked` + `arbitration: {proposer: rule\|bayesian\|llm\|human, validator: causal}` 로 선언 | proposer의 client + ontorag MCP |
 
 #### 내장 액션
 

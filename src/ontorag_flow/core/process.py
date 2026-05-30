@@ -58,8 +58,19 @@ class ProcessDefinition(BaseModel):
         default=None,
         description=(
             "Which decision engine drives next-action selection: 'rule', "
-            "'bayesian', or 'llm'. If unset, it is inferred from the config "
-            "present (bayesian block -> bayesian, rules -> rule)."
+            "'bayesian', 'causal', 'llm', 'human', or 'stacked'. If unset, "
+            "it is inferred from the config present (causal block → causal, "
+            "bayesian block → bayesian, rules → rule)."
+        ),
+    )
+    arbitration: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional stacked-engine arbitration. Shape: "
+            "{'proposer': 'rule|bayesian|llm|human', 'validator': 'causal'}. "
+            "Only honoured when engine='stacked'. The proposer's proposals are "
+            "rescored by the validator's score_intervention; both engines must "
+            "have their backing clients configured for the chosen kinds."
         ),
     )
     constraints: dict[str, Any] = Field(

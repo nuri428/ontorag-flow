@@ -19,7 +19,7 @@ from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.core.registry import ActionRegistry
 from ontorag_flow.engines.base import DecisionEngine
 from ontorag_flow.engines.bayesian import BayesianMpeEngine, SupportsToolCall
-from ontorag_flow.engines.causal import CausalSimulationEngine
+from ontorag_flow.engines.causal import CausalSimulationEngine, StackedEngine
 from ontorag_flow.engines.human import HumanReviewEngine
 from ontorag_flow.engines.llm_agent import LlmAgentEngine, LlmClient
 from ontorag_flow.engines.rule import RuleEngine
@@ -29,7 +29,8 @@ logger = get_logger(__name__)
 
 __all__ = ["EngineResolver", "EngineUnavailableError"]
 
-_VALID_KINDS = frozenset({"rule", "bayesian", "causal", "llm", "human"})
+_VALID_KINDS = frozenset({"rule", "bayesian", "causal", "llm", "human", "stacked"})
+_STACKED_PROPOSER_KINDS = frozenset({"rule", "bayesian", "llm", "human"})
 
 
 class EngineUnavailableError(RuntimeError):
@@ -119,4 +120,47 @@ class EngineResolver:
                     "configured (set LLM_PROVIDER, e.g. anthropic|openai|ollama)."
                 )
             return LlmAgentEngine(self._llm_client, registry=self._registry)
+        if kind == "stacked":
+            return self._build_stacked(process)
         raise EngineUnavailableError(f"Unsupported engine kind: {kind!r}")
+
+    def _build_stacked(self, process: ProcessDefinition) -> StackedEngine:
+        """Construct a :class:`StackedEngine` from ``process.arbitration``.
+
+        Required shape::
+
+            arbitration:
+              proposer: rule | bayesian | llm | human
+              validator: causal     # only causal supports score_intervention today
+
+        The proposer and validator engines are built via the same resolver
+        so their client / configuration requirements remain consistent.
+        """
+
+        config = process.arbitration or {}
+        proposer_kind = str(config.get("proposer", "")).lower()
+        validator_kind = str(config.get("validator", "causal")).lower()
+
+        if proposer_kind not in _STACKED_PROPOSER_KINDS:
+            raise EngineUnavailableError(
+                f"Stacked engine needs arbitration.proposer in "
+                f"{sorted(_STACKED_PROPOSER_KINDS)}; got {proposer_kind!r}."
+            )
+        if validator_kind != "causal":
+            raise EngineUnavailableError(
+                "Stacked engine validator must be 'causal' (only the Causal "
+                f"engine exposes score_intervention); got {validator_kind!r}."
+            )
+
+        # Build the sub-engines through a one-off proxy process so their own
+        # kind_for / for_process paths run unchanged — keeps every error
+        # message ("LLM client missing", "ontorag client missing") consistent.
+        proposer_proxy = process.model_copy(update={"engine": proposer_kind, "arbitration": None})
+        validator_proxy = process.model_copy(update={"engine": validator_kind, "arbitration": None})
+        proposer = self.for_process(proposer_proxy)
+        validator = self.for_process(validator_proxy)
+        if not isinstance(validator, CausalSimulationEngine):
+            raise EngineUnavailableError(
+                "Stacked engine validator did not resolve to a CausalSimulationEngine."
+            )
+        return StackedEngine(proposer=proposer, validator=validator)

@@ -99,6 +99,14 @@ def process_to_rdf(process: ProcessDefinition, *, format: str = "turtle") -> str
                 Literal(json.dumps(process.timer_events, sort_keys=True)),
             )
         )
+    if process.arbitration is not None:
+        graph.add(
+            (
+                subject,
+                OF.arbitrationJson,
+                Literal(json.dumps(process.arbitration, sort_keys=True)),
+            )
+        )
 
     return graph.serialize(format=format)
 
@@ -169,6 +177,7 @@ def load_process_rdf(path: str | Path, *, format: str | None = None) -> ProcessD
             causal=_json_literal(graph, subject, OF.causalJson),
             constraints=_json_literal(graph, subject, OF.constraintsJson) or {},
             timer_events=_json_literal(graph, subject, OF.timerEventsJson) or [],
+            arbitration=_json_literal(graph, subject, OF.arbitrationJson),
         )
     except ValidationError as exc:
         raise ProcessParseError(

@@ -81,6 +81,7 @@ def test_full_round_trip_preserves_every_field(tmp_path: Path) -> None:
         timer_events=[
             {"after_minutes": 0, "action": "urn:a:1", "params": {"k": "v"}},
         ],
+        arbitration={"proposer": "rule", "validator": "causal"},
     )
 
     path = tmp_path / "full.ttl"
@@ -95,6 +96,7 @@ def test_full_round_trip_preserves_every_field(tmp_path: Path) -> None:
     assert loaded.rules == process.rules
     assert loaded.goal == process.goal
     assert loaded.initial_state == process.initial_state
+    assert loaded.arbitration == process.arbitration
 
 
 def test_json_ld_round_trip(tmp_path: Path) -> None:

@@ -90,3 +90,83 @@ def test_for_process_builds_causal_with_client() -> None:
 def test_causal_without_client_raises() -> None:
     with pytest.raises(EngineUnavailableError):
         EngineResolver().for_process(_proc(causal={"target": {"done": True}}))
+
+
+# --- stacked engine arbitration -----------------------------------------
+
+
+def test_stacked_kind_recognised() -> None:
+    resolver = EngineResolver()
+    assert resolver.kind_for(_proc(engine="stacked")) == "stacked"
+
+
+def test_stacked_with_rule_proposer_and_causal_validator_builds() -> None:
+    from ontorag_flow.engines.causal import StackedEngine
+
+    resolver = EngineResolver(ontorag_client=FakeOntorag())
+    process = _proc(
+        engine="stacked",
+        rules=[_RULE],
+        arbitration={"proposer": "rule", "validator": "causal"},
+    )
+    engine = resolver.for_process(process)
+    assert isinstance(engine, StackedEngine)
+
+
+def test_stacked_with_llm_proposer_requires_llm_client() -> None:
+    """If the proposer kind needs a client, the error message points at *that*."""
+
+    resolver = EngineResolver(ontorag_client=FakeOntorag())  # no LLM client
+    process = _proc(
+        engine="stacked",
+        arbitration={"proposer": "llm", "validator": "causal"},
+    )
+    with pytest.raises(EngineUnavailableError, match="LLM"):
+        resolver.for_process(process)
+
+
+def test_stacked_without_ontorag_client_fails_on_validator() -> None:
+    resolver = EngineResolver(llm_client=FakeLlm())  # no ontorag client
+    process = _proc(
+        engine="stacked",
+        rules=[_RULE],
+        arbitration={"proposer": "rule", "validator": "causal"},
+    )
+    with pytest.raises(EngineUnavailableError, match="ontorag"):
+        resolver.for_process(process)
+
+
+def test_stacked_rejects_unknown_proposer() -> None:
+    resolver = EngineResolver(ontorag_client=FakeOntorag())
+    with pytest.raises(EngineUnavailableError, match="arbitration.proposer"):
+        resolver.for_process(
+            _proc(engine="stacked", arbitration={"proposer": "magic", "validator": "causal"})
+        )
+
+
+def test_stacked_rejects_non_causal_validator() -> None:
+    """Only causal exposes score_intervention today."""
+
+    resolver = EngineResolver(ontorag_client=FakeOntorag())
+    with pytest.raises(EngineUnavailableError, match="validator must be 'causal'"):
+        resolver.for_process(
+            _proc(
+                engine="stacked",
+                rules=[_RULE],
+                arbitration={"proposer": "rule", "validator": "bayesian"},
+            )
+        )
+
+
+def test_stacked_defaults_validator_to_causal_when_unspecified() -> None:
+    """The validator field defaults to 'causal' so the YAML can omit it."""
+
+    from ontorag_flow.engines.causal import StackedEngine
+
+    resolver = EngineResolver(ontorag_client=FakeOntorag())
+    process = _proc(
+        engine="stacked",
+        rules=[_RULE],
+        arbitration={"proposer": "rule"},
+    )
+    assert isinstance(resolver.for_process(process), StackedEngine)
