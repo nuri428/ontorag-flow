@@ -1,0 +1,98 @@
+site_name: ontorag-flow
+site_description: Ontology-grounded adaptive case management — the Kinetic layer over ontorag.
+site_url: https://nuri428.github.io/ontorag-flow/
+site_author: 강재호
+repo_url: https://github.com/nuri428/ontorag-flow
+repo_name: nuri428/ontorag-flow
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+strict: true
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  # mkdocs-static-i18n: file-suffix mode. Default locale (en) reads `foo.md`,
+  # secondary locales read `foo.<locale>.md`. Pages that have no `.ko.md`
+  # twin still appear in the KO site, falling back to the EN file.
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: ko
+          name: 한국어
+          build: true
+          nav_translations:
+            Home: 홈
+            Operator guide: 운영자 가이드
+            Operations (backup / DR): 운영 (백업 / DR)
+            Architecture & milestones: 아키텍처 & 마일스톤
+
+nav:
+  - Home: index.md
+  - Operator guide: operator-guide.md
+  - Operations (backup / DR): operations.md
+  - Architecture & milestones: https://github.com/nuri428/ontorag-flow/blob/main/CLAUDE.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+extra:
+  alternate:
+    - name: English
+      link: /ontorag-flow/
+      lang: en
+    - name: 한국어
+      link: /ontorag-flow/ko/
+      lang: ko

@@ -50,6 +50,13 @@ dev = [
     # bindings testcontainers pulls in have no place in a runtime image.
     "testcontainers[postgres]>=4.0",
 ]
+# Documentation site (MkDocs Material → GitHub Pages). Pure build-time deps,
+# never imported by runtime code.
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocs-static-i18n>=1.2",
+    "pymdown-extensions>=10.0",
+]
 
 [build-system]
 requires = ["hatchling"]

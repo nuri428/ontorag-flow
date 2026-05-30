@@ -14,3 +14,6 @@ htmlcov/
 .ruff_cache/
 .mypy_cache/
 .claude/
+
+# MkDocs build output (deployed via GitHub Pages workflow, never committed)
+site/
