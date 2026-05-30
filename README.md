@@ -30,11 +30,14 @@ uv sync --extra dev
 # Reference demo (a synthetic patient case that auto-closes)
 uv run python examples/medical_triage/run_demo.py
 
-# HTTP API + read-only Web UI
+# HTTP API + Web UI (read + mutating: suspend/resume/compensate/subcase/tick + counterfactual + inspector)
 uv run ontorag-flow serve
-#   →  http://localhost:8100/ui/      (cases, actions, audit)
-#   →  http://localhost:8100/docs     (OpenAPI)
-#   →  http://localhost:8100/mcp      (MCP transport)
+#   →  http://localhost:8100/ui/                     (dashboard, Tick all timers)
+#   →  http://localhost:8100/ui/cases/<uri>          (lifecycle buttons, subcase tree)
+#   →  http://localhost:8100/ui/cases/<uri>/explain  (engine inspector — "why?")
+#   →  http://localhost:8100/ui/cases/<uri>/audit    (PROV-O + Counterfactual links)
+#   →  http://localhost:8100/docs                    (OpenAPI)
+#   →  http://localhost:8100/mcp                     (MCP transport)
 
 # Or drive everything from the CLI
 uv run ontorag-flow process load examples/medical_triage/process.yaml
@@ -53,16 +56,17 @@ auto-close on goal satisfaction, and exports a PROV-O Turtle audit trail.
 | Capability | Where |
 |---|---|
 | Action protocol (validate / execute / compensate / audit) with declared side effects | `core/action.py` |
-| Immutable `Case` + state machine (open/suspended/closed/failed) | `core/case.py` |
-| CMMN-inspired `ProcessDefinition` (YAML or Turtle) | `core/process.py`, `core/process_rdf.py` |
-| `CaseManager` orchestrating execute → state apply → audit, with saga compensation, suspend/resume/fork, mutex/requires constraints, human handoff | `core/case_manager.py` |
-| **Five pluggable decision engines** — see table below | `engines/` |
-| Per-process engine selection via `EngineResolver` | `engines/selection.py` |
-| Persistence: SQLite (dev) and Postgres (prod), same Protocols | `stores/sqlite.py`, `stores/postgres.py` |
-| Read-only Web UI (cases, actions, decision inspector, audit) | `ui/` |
+| Immutable `Case` + state machine (open/suspended/closed/failed), parent/subcase linkage | `core/case.py` |
+| CMMN-inspired `ProcessDefinition` (YAML or RDF/Turtle/JSON-LD) | `core/process.py`, `core/process_rdf.py` |
+| `CaseManager` orchestrating execute → state apply → audit, with saga compensation, suspend/resume/fork, subcase tree, timer events, ordering constraints (mutex / requires / immediately_after / at_most_once), human handoff | `core/case_manager.py` |
+| **Six pluggable decision engines** — including a `StackedEngine` declarable from YAML — see table below | `engines/` |
+| Per-process engine selection via `EngineResolver` (incl. `engine: stacked` arbitration) | `engines/selection.py` |
+| Optional **`engine.explain()`** with per-engine reasoning trace | `engines/base.py` + each engine |
+| Persistence: SQLite (dev) and Postgres (prod), same Protocols, optimistic locking | `stores/sqlite.py`, `stores/postgres.py` |
+| Web UI — case dashboard with `Tick all timers`, case-detail mutating buttons (Suspend / Resume / Compensate / Execute top proposal / Spawn subcase), engine inspector (`/explain`), counterfactual replay (`/counterfactual`), audit view | `ui/` |
 | FastAPI REST + `fastapi-mcp` so every operation is also an MCP tool | `api/` |
+| Built-in actions: case-state, human-review, and **ABox write-back** (`AssertTriple` / `RetractTriple`) via ontorag MCP | `actions/` |
 | PROV-O / DCAT audit export to JSON-LD or Turtle | `core/provenance.py` |
-| Optimistic locking on case updates | `stores/*.py` |
 
 ## Decision engines
 
@@ -96,12 +100,15 @@ whole stack over MCP without HTTP knowledge:
 | `execute_action` | run a chosen action against a case |
 | `propose_next_action` | ranked decision-engine proposals (no execution) |
 | `compensate_case` / `suspend_case` / `resume_case` / `fork_case` | adaptive case management |
+| `create_subcase` | spawn a child case under a parent (subprocess linkage) |
+| `tick_timers` | fire elapsed timer events across all open cases |
 | `counterfactual_replay` | "what if at this step we'd done Y?" via ontorag causal |
 | `get_audit_trail` | PROV-O activities for a case |
 
 ontorag-flow is also an **MCP client** of ontorag itself — see
-`ontorag_client/tools.py` for the typed wrappers
-(`find_entities`, `compute_posterior`, `do_query`, `counterfactual`, …).
+`ontorag_client/tools.py` for the typed wrappers (`find_entities`,
+`describe_entity`, `get_schema`, `compute_posterior`, `do_query`,
+`counterfactual`, `assert_triple`, `retract_triple`).
 
 ---
 
@@ -160,15 +167,19 @@ docker compose -f docker-compose.yml -f ../ontorag/docker-compose.yml up
 
 ```
 src/ontorag_flow/
-├── core/         Action / Case / Process / Executor / Audit / CaseManager
-├── engines/      DecisionEngine Protocol + 5 implementations + Resolver + Stacked
-├── ontorag_client/  MCP client (single shared connection) + typed tool wrappers
-├── stores/       SqliteStore + PostgresStore (same Protocols, swappable)
-├── actions/      Built-in action library (UpdateCaseProperty, SetGoal, RequestHumanReview)
+├── core/         Action / Case / Process (+ RDF) / Executor / Audit / CaseManager / Registry
+├── engines/      DecisionEngine Protocol + EngineExplanation + 5 base + StackedEngine + Resolver
+├── ontorag_client/  MCP client (single shared connection) + typed tool wrappers (incl. assert_triple)
+├── stores/       SqliteStore + PostgresStore (same Protocols, swappable, optimistic locking)
+├── actions/      Built-in actions — case-state, human, and ABox write-back (Assert/RetractTriple)
 ├── api/          FastAPI app + routes + fastapi-mcp mount
-├── ui/           Read-only Jinja2 inspector (dashboard / actions / case detail / audit)
+├── ui/           Jinja2 UI — dashboard (tick), case detail (mutating buttons + subcase tree), explain inspector, counterfactual, audit
 └── cli.py        Typer CLI
-examples/medical_triage/   Reference end-to-end demo
+examples/
+├── medical_triage/      Reference end-to-end demo (RuleEngine, auto-closing case)
+├── supply_chain_rca/    Second domain demo — RuleEngine + optional LLM variant
+└── bayesian_demo/       Bayesian engine over a tiny fake ontorag MCP fixture
+docs/operator-guide.md   Bilingual operator guide (EN + KO)
 ```
 
 ---
@@ -208,7 +219,13 @@ docstrings; this section is the index.
 | Compensate (saga rollback) | `ontorag-flow case compensate <case_uri>` | `action.compensate` hooks, state restored from `state_before`, audit retains every event |
 | Counterfactual "what if Y instead?" | `ontorag-flow case counterfactual ...` | `CausalSimulationEngine` over ontorag MCP (requires ontorag v0.8) |
 | Live PostgreSQL backend | `docker compose --profile postgres up` + `tests/test_postgres_store_integration.py` | `PostgresStore` round-trip via testcontainers |
-| Browse cases / actions / audit in a UI | `ontorag-flow serve` → `http://localhost:8100/ui/` | Read-only inspector with live engine proposals |
+| Browse cases / actions / audit in a UI | `ontorag-flow serve` → `http://localhost:8100/ui/` | Live dashboard with `Tick all timers`, status filter, case links |
+| Drive lifecycle from the browser | `/ui/cases/<uri>` → Suspend / Resume / Execute top proposal / Compensate / Spawn subcase | Form POST + 303 redirect pattern, JS-free; conditional buttons per status |
+| Diagnose "why did the engine recommend that?" | `/ui/cases/<uri>/explain` | `engine.explain()` rendered as engine-specific cards (rules-fired table / posterior bars / LLM prompts / proposer-vs-validator) |
+| Replay a past activity under a swap | `/ui/cases/<uri>/audit` → "Counterfactual" row link | Read-only "what if Y instead?" form against the causal engine |
+| Stack a proposer with a causal validator from YAML | `engine: stacked` + `arbitration: {proposer: rule\|bayesian\|llm\|human, validator: causal}` | Two-engine arbitration declared in the model, no Python wiring |
+| Define a process as RDF instead of YAML | `ontorag-flow process load <process.ttl\|process.jsonld>` | `urn:ontorag-flow:process#` vocabulary, full field round-trip incl. engine / causal / constraints / timer_events / arbitration |
+| Write back triples to ontorag's ABox | Use `AssertTriple` / `RetractTriple` in `allowed_actions` (live `OntoragClient` required) | `ABOX_WRITE` side effect with saga `compensate` to retract on rollback |
 
 #### CLI tools
 
@@ -265,7 +282,13 @@ docstrings; this section is the index.
 | 보상(saga 롤백) | `ontorag-flow case compensate <case_uri>` | `action.compensate` 훅, `state_before`로 상태 복원, audit는 모든 이벤트 보존 |
 | 반사실 "Y였다면?" 시뮬레이션 | `ontorag-flow case counterfactual ...` | `CausalSimulationEngine` via ontorag MCP (ontorag v0.8 필요) |
 | 라이브 PostgreSQL 백엔드 | `docker compose --profile postgres up` + `tests/test_postgres_store_integration.py` | `PostgresStore` round-trip via testcontainers |
-| UI에서 케이스/액션/감사 둘러보기 | `ontorag-flow serve` → `http://localhost:8100/ui/` | 라이브 엔진 제안이 보이는 읽기 전용 inspector |
+| UI에서 케이스/액션/감사 둘러보기 | `ontorag-flow serve` → `http://localhost:8100/ui/` | `Tick all timers`, 상태 필터, 케이스 링크가 있는 라이브 대시보드 |
+| 브라우저에서 lifecycle 직접 운용 | `/ui/cases/<uri>` → Suspend / Resume / Execute top proposal / Compensate / Spawn subcase | Form POST + 303 redirect 패턴, JS-free; 상태별 conditional 버튼 |
+| "왜 엔진이 그것을 추천했나?" 진단 | `/ui/cases/<uri>/explain` | `engine.explain()` 을 engine-specific 카드로 (규칙-발화 표 / posterior 막대 / LLM prompt / proposer-vs-validator 비교) |
+| 과거 activity를 swap해서 재생 | `/ui/cases/<uri>/audit` → 행의 "Counterfactual" 링크 | causal engine에 대한 read-only "Y였다면?" 폼 |
+| YAML에서 proposer + causal validator 합성 | `engine: stacked` + `arbitration: {proposer: rule\|bayesian\|llm\|human, validator: causal}` | 두 엔진 arbitration을 모델에 선언, Python wiring 불필요 |
+| 프로세스를 YAML 대신 RDF로 정의 | `ontorag-flow process load <process.ttl\|process.jsonld>` | `urn:ontorag-flow:process#` vocabulary, engine / causal / constraints / timer_events / arbitration 전 필드 round-trip |
+| ontorag ABox에 트리플 write-back | `allowed_actions` 에 `AssertTriple` / `RetractTriple` (live `OntoragClient` 필요) | `ABOX_WRITE` 부수효과 + 롤백 시 retract하는 saga `compensate` |
 
 #### CLI 도구
 
@@ -315,12 +338,18 @@ docstrings; this section is the index.
 - [`docs/operator-guide.md`](docs/operator-guide.md) — **operator
   guide** for the browser UI (EN + KO). What each lifecycle button does,
   how to read error callouts, common scenarios, counterfactual replay,
-  and what the UI deliberately does *not* do.
+  the engine inspector, and what the UI deliberately does *not* do.
 - [`CLAUDE.md`](CLAUDE.md) — project specification, architecture
   rationale, milestone plan, anti-patterns, **Known risks for v1.x**
-  (history bloat, write-ahead audit).
+  (history bloat, write-ahead audit), and the running record of which
+  *Open questions* are **DECIDED** vs **PARTIAL**.
 - [`examples/medical_triage/`](examples/medical_triage/) — reference
   end-to-end demo + the YAML process this README's quickstart uses.
+- [`examples/supply_chain_rca/`](examples/supply_chain_rca/) — second
+  domain demo with `EXTERNAL_API` / `HUMAN` side effects, plus an LLM
+  variant (`run_demo_llm.py`).
+- [`examples/bayesian_demo/`](examples/bayesian_demo/) — Bayesian
+  engine running against an in-process fake ontorag MCP fixture.
 
 ## License
 
