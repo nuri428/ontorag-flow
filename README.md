@@ -22,6 +22,60 @@ ontorag-flow acts, both speak [MCP](https://modelcontextprotocol.io).
 
 ---
 
+## Where on the BPM ↔ ACM spectrum
+
+```
+   BPM (prescriptive)           ←—— spectrum ——→        ACM (adaptive)
+   ─────────────────                                    ────────────
+   "do exactly this sequence"                           "these actions are allowed,
+                                                         engine decides at runtime"
+   Camunda / Activiti                  ontorag-flow            CMMN / Palantir
+                                          ↑
+                                  default: ACM-leaning
+                                  turn the dial via:
+                                  - DecisionEngine choice (7 pluggable)
+                                  - constraints (requires / immediately_after / mutex / at_most_once)
+                                  - skeleton (optional happy path)
+                                  - rule confidence cutoffs
+```
+
+**Same case manager, same audit, same lifecycle. The dial is in the
+process YAML.** Three positions for the same runtime:
+
+- **Most BPM-like** — `engine: rule`, all rules `confidence: 1.0`,
+  `constraints.immediately_after` chains every action, `skeleton:`
+  lists the happy path. Looks like a state-machine that happens to log
+  everything as PROV-O.
+- **Default (ACM-leaning)** — engine recommends, operator clicks
+  *Execute top proposal*; `constraints` prune illegal moves;
+  `skeleton` is advisory (deviations are flagged in audit, not blocked).
+- **Most ACM-like** — `engine: llm` / `engine: causal`, no `skeleton`,
+  no `immediately_after`. The engine reasons over case state, picks
+  from `allowed_actions`, operator approves.
+
+ACM is the *default* not the *only* mode because:
+
+1. **LLM is the decision-maker, not the orchestrator.** A pre-baked
+   BPMN graph was a stand-in for the missing decision-maker; once a
+   credible LLM is in the loop, the graph evaporates.
+2. **Ontology is the guard-rail, not the spec.** TBox classes + DL
+   constraints already say what's *coherent*; re-encoding that into
+   BPMN gateways is double bookkeeping.
+3. **Goal-driven matches how an LLM thinks.** "Diagnosed = true" is a
+   target an LLM can hold across context; "advance to node 5" is
+   bookkeeping it has to keep separately from the reasoning.
+
+**Provenance is how we match BPM's strongest argument.** BPM wins on
+"replay the diagram to see what should have happened". ACM matches
+that and goes further: every action writes a PROV-O Activity with
+agent / inputs / outputs / `wasInformedBy` chain; every engine that
+opts into `explain()` records its reasoning trace (which rule fired,
+posterior breakdown, exact LLM prompt + raw reply). Adaptive *with*
+full forensic recall, no opt-out. See
+[Philosophy →](https://nuri428.github.io/ontorag-flow/philosophy/).
+
+---
+
 ## 60-second quickstart
 
 ```bash

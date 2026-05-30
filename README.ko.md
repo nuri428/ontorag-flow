@@ -23,6 +23,60 @@ ontorag-flow가 행동하며, 둘은 [MCP](https://modelcontextprotocol.io)로
 
 ---
 
+## BPM ↔ ACM 스펙트럼 어디인가
+
+```
+   BPM (prescriptive)           ←—— spectrum ——→        ACM (adaptive)
+   ─────────────────                                    ────────────
+   "정확히 이 시퀀스대로"                                  "이 액션들이 허용된다,
+                                                          엔진이 runtime에 결정"
+   Camunda / Activiti                 ontorag-flow              CMMN / Palantir
+                                          ↑
+                                기본: ACM-leaning
+                                다이얼은 다음으로 돌림:
+                                - DecisionEngine 선택 (7가지 플러그형)
+                                - constraints (requires / immediately_after / mutex / at_most_once)
+                                - skeleton (선택적 happy path)
+                                - 규칙 confidence 컷오프
+```
+
+**같은 case manager, 같은 감사, 같은 lifecycle. 다이얼은 프로세스
+YAML에 있습니다.** 같은 runtime에 3 위치:
+
+- **가장 BPM-like** — `engine: rule`, 모든 규칙 `confidence: 1.0`,
+  `constraints.immediately_after`가 모든 액션 chain, `skeleton:`이
+  happy path 명시. 모든 것을 PROV-O로 기록하는 *state-machine*처럼
+  보임.
+- **기본 (ACM-leaning)** — 엔진이 추천, 운영자가 *Execute top
+  proposal* 클릭; `constraints`가 불법 move 차단; `skeleton`은 advisory
+  (이탈 시 audit에 *표시*되지만 막지 않음).
+- **가장 ACM-like** — `engine: llm` / `engine: causal`, `skeleton`
+  없음, `immediately_after` 없음. 엔진이 case state를 reasoning하고
+  `allowed_actions`에서 선택, 운영자 승인.
+
+ACM이 *유일한 모드가 아닌 기본*인 세 가지 이유:
+
+1. **LLM이 결정자이지 오케스트레이터가 아님.** pre-baked BPMN 그래프는
+   *결정자 부재의 대용품*이었습니다 — LLM이 loop에 들어오면 그래프는
+   증발합니다.
+2. **온톨로지가 가드레일이지 spec이 아님.** TBox 클래스 + DL 제약이
+   이미 *coherent한 것*을 정의합니다; BPMN gateway로 다시 인코딩하는 건
+   이중 부기.
+3. **Goal-driven이 LLM 사고와 일치.** "Diagnosed = true"는 LLM이
+   context 가로질러 들고 갈 수 있는 타깃; "node 5로 advance"는 LLM이
+   reasoning과 별도로 들고 다녀야 하는 부기.
+
+**Provenance가 BPM의 가장 강한 주장에 답하는 방식입니다.** BPM은
+"다이어그램을 replay해서 무엇이 일어났어야 하는지 보기"에서 승리합니다.
+ACM은 그것을 *동등하게* 충족하고 더 나아갑니다: 모든 action이 agent /
+inputs / outputs / `wasInformedBy` chain이 있는 PROV-O Activity를 기록;
+`explain()` opt-in한 엔진은 reasoning trace 기록 (발화된 규칙, posterior
+breakdown, 정확한 LLM prompt + raw reply). 적응형 *과 함께* 완전한
+forensic recall, opt-out 없음. 자세히는
+[Philosophy →](https://nuri428.github.io/ontorag-flow/ko/philosophy/).
+
+---
+
 ## 60초 퀵스타트
 
 ```bash

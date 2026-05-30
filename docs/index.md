@@ -20,6 +20,14 @@
 Open-source **Palantir-style 3-layer ontology stack**: ontorag reasons,
 ontorag-flow acts, both speak [MCP](https://modelcontextprotocol.io).
 
+**Where on the BPM ↔ ACM spectrum:** ontorag-flow defaults to
+ACM-leaning (engine recommends, operator approves, no pre-baked
+sequence) and reaches the BPM-rigid end by *tightening constraints +
+skeleton + deterministic engine* in the same process YAML. The runtime
+doesn't change; the data does. Provenance is non-optional throughout
+so adaptive runs stay forensically replayable. See
+[**Philosophy →**](philosophy.md) for the long-form rationale.
+
 ---
 
 ## 60-second quickstart

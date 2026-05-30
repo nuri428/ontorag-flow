@@ -19,6 +19,13 @@
 ontorag-flow가 행동하며, 둘은 [MCP](https://modelcontextprotocol.io)로
 대화합니다.
 
+**BPM ↔ ACM 스펙트럼 어디인가:** ontorag-flow는 ACM-leaning (엔진이
+추천, 운영자가 승인, pre-baked 시퀀스 없음)을 기본으로 하고, 같은
+프로세스 YAML에서 *constraints + skeleton + 결정적 엔진을 조여서* BPM
+rigid 끝까지 도달합니다. Runtime은 바뀌지 않고 데이터가 바뀝니다.
+Provenance는 전체적으로 non-optional이라 적응형 실행도 forensically
+replayable. long-form rationale은 [**Philosophy →**](philosophy.md).
+
 ---
 
 ## 60초 퀵스타트

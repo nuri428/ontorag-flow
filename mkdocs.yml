@@ -92,6 +92,7 @@ plugins:
           build: true
           nav_translations:
             Home: 홈
+            "Philosophy (BPM ↔ ACM)": "철학 (BPM ↔ ACM)"
             Tutorials: 튜토리얼
             First case end-to-end: 첫 케이스 end-to-end
             Authoring a process YAML: 프로세스 YAML 작성
@@ -113,6 +114,7 @@ plugins:
 
 nav:
   - Home: index.md
+  - Philosophy (BPM ↔ ACM): philosophy.md
   - Tutorials:
       - First case end-to-end: tutorials/first-case.md
       - Authoring a process YAML: tutorials/authoring-process.md
