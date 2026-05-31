@@ -4,9 +4,48 @@ version = "0.1.0"
 description = "Ontology-aware orchestration & Adaptive Case Management framework — the Kinetic layer over ontorag."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
-authors = [{ name = "ontorag-flow contributors" }]
-keywords = ["ontology", "owl", "workflow", "case-management", "mcp", "prov-o"]
+license = { file = "LICENSE" }
+authors = [{ name = "강재호 (Kang Jaeho)", email = "greennuri@gmail.com" }]
+maintainers = [{ name = "강재호 (Kang Jaeho)", email = "greennuri@gmail.com" }]
+keywords = [
+    "ontology",
+    "owl",
+    "rdf",
+    "workflow",
+    "case-management",
+    "acm",
+    "cmmn",
+    "mcp",
+    "model-context-protocol",
+    "prov-o",
+    "provenance",
+    "bayesian",
+    "causal-inference",
+    "llm",
+    "agent",
+    "fastapi",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Office/Business :: Scheduling",
+    "Framework :: FastAPI",
+    "Framework :: Pydantic :: 2",
+    "Typing :: Typed",
+]
+
 
 dependencies = [
     "pydantic>=2.7",
@@ -26,6 +65,15 @@ dependencies = [
 
 [project.scripts]
 ontorag-flow = "ontorag_flow.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/nuri428/ontorag-flow"
+Documentation = "https://nuri428.github.io/ontorag-flow/"
+Repository = "https://github.com/nuri428/ontorag-flow"
+Issues = "https://github.com/nuri428/ontorag-flow/issues"
+Changelog = "https://github.com/nuri428/ontorag-flow/blob/main/CHANGELOG.md"
+"Security policy" = "https://github.com/nuri428/ontorag-flow/blob/main/SECURITY.md"
+"Sister repo (ontorag)" = "https://github.com/ontorag"
 
 [project.optional-dependencies]
 # LLM provider SDKs for LlmAgentEngine (anthropic/openai). Ollama is reached
