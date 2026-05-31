@@ -9,7 +9,7 @@ Every command supports `--help` for flags + defaults. This page is the
 |---|---|
 | `ontorag-flow init` | Bootstrap `.env` from `.env.example` if absent |
 | `ontorag-flow status` | Show config + probe ontorag MCP connection |
-| `ontorag-flow serve [--host H --port P]` | Run FastAPI + MCP + UI |
+| `ontorag-flow serve [--host H --port P] [--graceful-timeout N]` | Run FastAPI + MCP + UI. `--graceful-timeout` (default 30s) is uvicorn's SIGTERM grace window; the lifespan also flips `/health/ready` to 503 immediately so a load balancer drains traffic during the window. |
 | `ontorag-flow --version` | Print version |
 
 ## `action`
@@ -51,6 +51,7 @@ Every command supports `--help` for flags + defaults. This page is the
 |---|---|
 | `ontorag-flow audit show <case_uri>` | Render the PROV-O activities table |
 | `ontorag-flow audit export <case_uri> --format <jsonld\|turtle\|nt>` | Render the trail as RDF |
+| `ontorag-flow audit prune --older-than N [--dry-run]` | Delete terminal (closed/failed) cases + activities older than N days. Open / suspended cases are never touched. Falls back to `AUDIT_RETENTION_DAYS` when `--older-than` is omitted. See [Operations — Retention](../operations.md#retention--pruning-the-audit-table). |
 
 ## Environment / extras
 

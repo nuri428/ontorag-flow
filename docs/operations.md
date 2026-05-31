@@ -157,7 +157,7 @@ investigate first.
 - [ ] Backup logs / output captured somewhere — silent backup
   failures are how data loss happens.
 
-## Retention — pruning the audit table
+## Retention — pruning the audit table { #retention--pruning-the-audit-table }
 
 The audit log is append-only; without a purge it grows linearly with
 case activity and eventually presses on disk + backup time. The

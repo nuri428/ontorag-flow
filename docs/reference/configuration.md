@@ -20,6 +20,7 @@ root). Defaults are safe for local development.
 | `ONTORAG_MCP_HTTPS_ONLY` | `false` | Refuse to connect when the ontorag URL is not `https://`. Defense against env-var hijack. See [Security S4](../security.md#s4-transport-trust). |
 | `ONTORAG_EXPECTED_VERSION` | unset | Pinned ontorag version; WARN-log on drift after connect. Detection, not enforcement. |
 | `ONTORAG_FLOW_PLUGIN_ALLOWLIST` | unset | Comma-separated entry-point names from `[project.entry-points."ontorag_flow.actions"]`; unlisted plugins are skipped. See [Security S7](../security.md#s7-ontorag_flow_plugin_allowlist). |
+| `AUDIT_RETENTION_DAYS` | unset | Default window (days) used by `ontorag-flow audit prune` and `POST /audit/prune` when `--older-than` / `older_than_days` is omitted. Unset = the CLI / API refuses to run without an explicit window. See [Operations — Retention](../operations.md#retention--pruning-the-audit-table). |
 
 ## Bootstrap
 

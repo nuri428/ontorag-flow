@@ -9,7 +9,8 @@ server is running; MCP transport is at `/mcp`.
 
 | Method · Path | `operation_id` (= MCP tool) | What |
 |---|---|---|
-| `GET /health` | `health_check` | Service liveness |
+| `GET /health` | `health_check` | Service liveness — process is up; cheap, no dependency touched |
+| `GET /health/ready` | `readiness_check` | Readiness — touches the store + verifies case manager wiring; returns 503 (with per-check breakdown) when not ready or shutting down. Use this for k8s readiness / LB upstream health checks |
 | `GET /actions` | `list_actions` | Registered action catalog |
 | `POST /processes` | `load_process` | Persist a process definition |
 | `GET /processes` | `list_processes` | List loaded processes |
@@ -29,6 +30,7 @@ server is running; MCP transport is at `/mcp`.
 | `POST /cases/{uri}/counterfactual` | `counterfactual_replay` | "What if Y at step X?" |
 | `GET /cases/{uri}/audit` | `get_audit_trail` | PROV-O activities for one case |
 | `GET /audit/aggregate` | `aggregate_audit` | Cross-case bucket counts (group_by + optional process filter + limit) |
+| `POST /audit/prune` | `prune_audit` | Delete terminal (closed/failed) cases + activities older than the window. Body: `{"older_than_days": N, "dry_run": false}`. Falls back to `AUDIT_RETENTION_DAYS` when omitted; 422 when neither is set. Cron / scheduler target |
 
 ## Web UI routes (not MCP-exposed)
 

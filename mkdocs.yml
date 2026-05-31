@@ -126,7 +126,7 @@ nav:
       - Connect to ontorag: how-to/ontorag.md
       - Deploy with Docker: how-to/docker.md
       - Operator guide (UI walkthrough): operator-guide.md
-      - Backup & restore: operations.md
+      - Operations (backup, retention, proxy, logs): operations.md
   - Reference:
       - CLI: reference/cli.md
       - HTTP & MCP API: reference/api.md
@@ -134,6 +134,8 @@ nav:
       - Built-in actions: reference/actions.md
       - Configuration: reference/configuration.md
       - Python API: reference/python-api.md
+  - Contributing: https://github.com/nuri428/ontorag-flow/blob/main/CONTRIBUTING.md
+  - Code of Conduct: https://github.com/nuri428/ontorag-flow/blob/main/CODE_OF_CONDUCT.md
   - Architecture & milestones: https://github.com/nuri428/ontorag-flow/blob/main/CLAUDE.md
 
 markdown_extensions:

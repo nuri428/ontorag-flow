@@ -6,7 +6,59 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-(Nothing here yet — open a PR to land the next change.)
+### Added — Operational safety
+
+- `GET /health/ready` — Kubernetes-style readiness probe distinct
+  from the liveness `GET /health`. Touches the store + verifies
+  case-manager wiring; returns 503 with per-check breakdown when
+  not ready or shutting down.
+- Graceful shutdown — on SIGTERM the lifespan flips
+  `app.state.shutting_down` so `/health/ready` starts returning 503
+  *before* the store closes, letting a load balancer drain traffic.
+  `ontorag-flow serve --graceful-timeout N` (default 30s) forwards
+  to uvicorn's `timeout_graceful_shutdown` so in-flight saga
+  executions finish.
+- Audit retention — `ontorag-flow audit prune --older-than N
+  [--dry-run]` CLI command and `POST /audit/prune` MCP-exposed
+  endpoint delete terminal (`closed` / `failed`) cases + activities
+  past the configured window. Open / suspended cases are never
+  touched. `AUDIT_RETENTION_DAYS` setting acts as a default;
+  refuses `--older-than 0` outright.
+- `SqliteStore` + `PostgresStore` gain `delete_by_case` and
+  `delete_case` (FK-safe order); `CaseStore` Protocol unchanged so
+  in-memory test stores keep working unchanged.
+
+### Added — Documentation
+
+- `docs/operations.md` (+ Korean mirror) gains Retention, Rate
+  limiting (nginx + Caddy reverse-proxy snippets), and Structured
+  logs (python-json-logger recipe) sections. Authentication added
+  to the not-covered list — it's a proxy concern by design.
+- `CONTRIBUTING.md` — dev setup, five-gate CI overview,
+  Conventional Commits convention, plugin authoring rules (Z5/Z6/S7
+  references), explicit out-of-scope list from `CLAUDE.md`.
+- `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1 (official
+  EthicalSource release, contact `greennuri@gmail.com`).
+
+### Added — GitHub repository hygiene
+
+- `.github/ISSUE_TEMPLATE/` — structured bug + feature forms with
+  `config.yml` directing questions to Discussions and security
+  reports to private advisories.
+- `.github/PULL_REQUEST_TEMPLATE.md` — five-gate checklist,
+  layer-touched taxonomy, anti-pattern self-check.
+- `.github/workflows/publish.yml` — PyPI publish via OIDC
+  trusted-publisher on `v*` tags. Two-job split (build / publish)
+  with the `pypi` environment as the OIDC trust boundary; no
+  long-lived API token stored in repo secrets.
+
+### Fixed
+
+- Docker build — `uv sync` now uses `--no-editable` so hatchling
+  resolves the LICENSE file referenced by PEP 639
+  `license = { file = "LICENSE" }`. Editable builds run hatchling
+  in an isolated temp dir that lost the LICENSE reference, failing
+  with `OSError: License file does not exist: LICENSE`.
 
 ## [0.1.0] — 2026-05-31
 

@@ -149,7 +149,7 @@ curl -fsS http://localhost:8100/ui/ > /dev/null
 - [ ] 백업 로그 / output 어딘가에 캡처 — silent 백업 실패가 데이터
   손실의 흔한 원인.
 
-## 보존 — audit 테이블 정리
+## 보존 — audit 테이블 정리 { #retention--pruning-the-audit-table }
 
 Audit log는 append-only입니다. 정리하지 않으면 케이스 활동에 선형
 비례해 자라며 결국 디스크와 백업 시간을 압박합니다.
