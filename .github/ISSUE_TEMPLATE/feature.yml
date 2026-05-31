@@ -1,0 +1,73 @@
+name: Feature request
+description: Propose a new capability or enhancement.
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a feature request, check the
+        [anti-pattern list in CLAUDE.md](../CLAUDE.md#what-not-to-do-anti-patterns) —
+        some kinds of features (BPMN visual editor, multi-tenant isolation,
+        built-in auth, training infra, etc.) are explicit non-goals and won't
+        be accepted as additions to core. Plugins via the `ontorag_flow.actions`
+        entry-point group are welcome to implement them out-of-tree.
+
+        For larger ideas, an open
+        [Discussion](https://github.com/nuri428/ontorag-flow/discussions)
+        often gets you scope alignment faster than an issue.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you do today? Who feels the pain?
+      placeholder: "When auto-running a process for a long-running case, there's
+        no way to throttle how many actions execute per minute, so a runaway
+        rule fires too aggressively."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: One paragraph sketch. Include the user-facing surface
+        (CLI flag, YAML field, API parameter) if you have one in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other shapes could solve the problem? Why is the
+        proposal above better?
+
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Which layer does this touch?
+      multiple: true
+      options:
+        - Core (action / case / executor / process)
+        - Decision engines
+        - Persistence (SQLite / Postgres / store Protocol)
+        - API / MCP surface
+        - CLI
+        - Web UI
+        - Documentation
+        - Plugin system
+        - CI / packaging / release
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope_check
+    attributes:
+      label: Scope check
+      options:
+        - label: I read the [anti-patterns in CLAUDE.md](../CLAUDE.md#what-not-to-do-anti-patterns) and this proposal does not conflict with any of them.
+          required: true
+        - label: I searched [open issues and discussions](https://github.com/nuri428/ontorag-flow/issues?q=is%3Aissue) for similar proposals.
+          required: true
