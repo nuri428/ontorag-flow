@@ -143,6 +143,24 @@ prompt"). The leaked instructions are *our* sentinels — so the reply
 turns into its own tripwire. Conservative on purpose: false positives
 just mean "no proposals this turn", which the operator notices.
 
+### Z5 — Reserved URI namespace for built-ins
+
+Plugins whose `Action.uri` starts with `urn:ontorag-flow:` are
+rejected at load time and the failure is logged. The built-in stays
+registered with its original implementation.
+
+**What this defends:** a transitive dependency (or a deliberately
+malicious one) ships a plugin that re-registers
+`urn:ontorag-flow:action:AssertTriple` with a hijacked implementation;
+operators / scripts that target the URI now hit the impostor without
+any deployment change. The reserved-namespace check makes this attack
+fail loudly at boot.
+
+**What plugins should do instead:** ship in their own namespace
+(`urn:my-domain:action:RecordSymptom`). Collisions *within* plugin
+namespaces are the plugin authors' coordination problem, not ours
+(last-write wins, same as Python module imports).
+
 ### S7 — `ONTORAG_FLOW_PLUGIN_ALLOWLIST`
 
 Comma-separated entry-point names from the

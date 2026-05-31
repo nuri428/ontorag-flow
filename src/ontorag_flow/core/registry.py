@@ -42,6 +42,13 @@ class ActionRegistry:
 
 _PLUGIN_GROUP = "ontorag_flow.actions"
 
+# Reserved URI namespace for actions shipped by this repository. External
+# plugins that try to register an action whose URI starts with this prefix
+# are rejected at load time — protects built-in semantics from accidental
+# or malicious override via a transitive dependency. Use a plugin-owned
+# namespace instead (e.g. urn:my-domain:action:RecordSymptom).
+_RESERVED_URI_PREFIX = "urn:ontorag-flow:"
+
 
 def default_registry(*, load_plugins: bool = True) -> ActionRegistry:
     """Return a registry pre-populated with the built-in action library.
@@ -122,6 +129,12 @@ def _load_plugin_actions(registry: ActionRegistry) -> None:
                 raise TypeError(
                     f"{entry.value!r} resolved to {type(instance).__name__}, "
                     f"which is not a BaseAction subclass."
+                )
+            if instance.uri.startswith(_RESERVED_URI_PREFIX):
+                raise ValueError(
+                    f"plugin action URI {instance.uri!r} uses the reserved "
+                    f"{_RESERVED_URI_PREFIX!r} namespace (built-ins only). "
+                    f"Use a plugin-owned namespace like urn:<your-domain>:action:Xxx."
                 )
             registry.register(instance)
             logger.info("Registered plugin action %r from %s", instance.uri, entry.value)

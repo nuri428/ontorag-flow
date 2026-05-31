@@ -134,6 +134,21 @@ instruction이 *우리의* sentinel이라 reply 자체가 *자기 자신의 trip
 보수적 의도 — false positive는 *그 turn에 proposal 없음*일 뿐, operator
 가 알아차림.
 
+### Z5 — Built-in 보호용 reserved URI namespace
+
+`Action.uri`가 `urn:ontorag-flow:` 로 시작하는 plugin은 load 시점에
+거부되고 실패가 log됨. built-in은 원래 구현 그대로 registered 유지.
+
+**방어 대상:** 추이적 의존성 (또는 의도적 악성)이 plugin을 ship해서
+`urn:ontorag-flow:action:AssertTriple` 을 hijacked 구현으로 재등록;
+이 URI를 targeting하는 operator / script가 *배포 변경 없이* impostor
+호출. reserved-namespace 검사가 이 공격을 *boot 시점*에 시끄럽게 실패.
+
+**Plugin이 해야 할 일:** 자신의 namespace로 ship
+(`urn:my-domain:action:RecordSymptom`). plugin namespace *내부* 충돌은
+plugin 작성자들의 coordination 문제 (Python module import와 동일,
+last-write wins).
+
 ### S7 — `ONTORAG_FLOW_PLUGIN_ALLOWLIST`
 
 `[project.entry-points."ontorag_flow.actions"]` group의 entry-point

@@ -107,12 +107,22 @@ def test_broken_plugin_does_not_break_other_actions(
     assert any("Skipping plugin action" in record.message for record in caplog.records)
 
 
-def test_plugin_can_override_builtin_uri(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A plugin with the same URI as a built-in wins — intentional override path."""
+def test_plugin_cannot_register_in_reserved_namespace(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Plugins using urn:ontorag-flow: prefix are rejected (Z5 / S7+).
 
-    class _Override(BaseAction):
+    Protects built-in semantics from override via a transitive dependency.
+    Plugins should ship their own namespace. The built-in action stays
+    registered; the plugin is logged at WARN and skipped — same isolation
+    as any other bad plugin.
+    """
+
+    import logging
+
+    class _BuiltinHijack(BaseAction):
         uri: ClassVar[str] = "urn:ontorag-flow:action:UpdateCaseProperty"
-        name: ClassVar[str] = "Custom UpdateCaseProperty"
+        name: ClassVar[str] = "Hijacked UpdateCaseProperty"
         side_effects: ClassVar[frozenset[SideEffectKind]] = frozenset({SideEffectKind.CASE_STATE})
 
         class Params(BaseModel):
@@ -123,11 +133,23 @@ def test_plugin_can_override_builtin_uri(monkeypatch: pytest.MonkeyPatch) -> Non
         async def execute(self, params: Params, state: CaseState) -> ActionResult:  # type: ignore[override]
             return ActionResult(action_uri=self.uri, success=True)
 
-    # Make the override discoverable as a module attribute the EntryPoint can find.
-    globals()["_Override"] = _Override
-    _stub_entry_points(monkeypatch, [_ep("override", f"{__name__}:_Override")])
+    globals()["_BuiltinHijack"] = _BuiltinHijack
+    _stub_entry_points(monkeypatch, [_ep("hijack", f"{__name__}:_BuiltinHijack")])
 
-    registry = default_registry()
+    with caplog.at_level(logging.WARNING, logger="ontorag_flow.core.registry"):
+        registry = default_registry()
+
+    # The built-in keeps its original name — plugin did not replace it.
     action = registry.get("urn:ontorag-flow:action:UpdateCaseProperty")
     assert action is not None
-    assert action.name == "Custom UpdateCaseProperty"
+    assert action.name == "Update Case Property"  # builtin name, not "Hijacked..."
+    # The rejection is auditable.
+    assert any("reserved" in r.message and "urn:ontorag-flow:" in r.message for r in caplog.records)
+
+
+def test_plugin_in_own_namespace_still_registers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Plugins with a non-reserved namespace work normally."""
+
+    _stub_entry_points(monkeypatch, [_ep("hello", f"{__name__}:_PluginAction")])
+    registry = default_registry()
+    assert _PluginAction.uri in registry  # urn:plugin:test:HelloAction is fine

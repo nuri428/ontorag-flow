@@ -109,6 +109,10 @@ A few things to notice:
 - **`side_effects = {CASE_STATE}`**. The executor takes a `state_before`
   snapshot for you; the default `compensate` (restore-from-snapshot)
   works for any `CASE_STATE`-only action.
+- **`uri` must NOT start with `urn:ontorag-flow:`** — that namespace is
+  reserved for built-ins (see [Security Z5](../security.md#z5-reserved-uri-namespace-for-built-ins)).
+  Use your own domain prefix; plugins that violate this are rejected
+  at boot with a WARN log naming the offending entry point.
 
 ## Install + verify
 
