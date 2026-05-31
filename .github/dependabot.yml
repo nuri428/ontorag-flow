@@ -1,13 +1,16 @@
-# Weekly dependency PRs for the runtime/dev deps and the actions in CI.
-# We keep the cadence weekly (not daily) so contributors don't drown in
-# bumps, and group the patches so a typical week is one PR instead of ten.
+# Monthly dependency PRs for the runtime/dev deps and the actions in CI.
+# Personal-project cadence: monthly groups keep the PR queue quiet without
+# losing coverage — GitHub's security advisories still raise *immediate*
+# vulnerability PRs out-of-band regardless of this schedule, so the
+# security floor doesn't drop. Grouping further reduces noise so a typical
+# month is one PR per ecosystem instead of ten.
 
 version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     open-pull-requests-limit: 5
     groups:
@@ -21,7 +24,7 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
     groups:
       actions:
