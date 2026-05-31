@@ -180,6 +180,15 @@ def status() -> None:
 def serve(
     host: str | None = typer.Option(None, help="Bind host (defaults to API_HOST)."),
     port: int | None = typer.Option(None, help="Bind port (defaults to API_PORT)."),
+    graceful_timeout: int = typer.Option(
+        30,
+        "--graceful-timeout",
+        help=(
+            "Seconds uvicorn waits for in-flight requests to finish on SIGTERM "
+            "before forcing close. The lifespan also flips /health/ready to 503 "
+            "immediately so a load balancer drains traffic during this window."
+        ),
+    ),
 ) -> None:
     """Run the FastAPI + MCP server with uvicorn."""
 
@@ -191,6 +200,7 @@ def serve(
         factory=True,
         host=host or settings.api_host,
         port=port or settings.api_port,
+        timeout_graceful_shutdown=graceful_timeout,
     )
 
 

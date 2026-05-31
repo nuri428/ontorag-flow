@@ -78,13 +78,22 @@ def create_app(
             registry=resolved_registry,
             engine_factory=resolver.for_process,
         )
+        app.state.shutting_down = False
+        logger.info("ontorag-flow %s ready", __version__)
         try:
             yield
         finally:
+            # Graceful shutdown: flip readiness to 503 first so a load balancer
+            # (k8s, Caddy, nginx) drains traffic before we tear down the store.
+            # uvicorn's --timeout-graceful-shutdown then lets in-flight requests
+            # finish executing actions before the connection closes.
+            app.state.shutting_down = True
+            logger.info("ontorag-flow shutting down — readiness flipped to 503")
             if ontorag_client is not None:
                 await ontorag_client.aclose()
             if owns_store:
                 await active_store.close()
+            logger.info("ontorag-flow shutdown complete")
 
     app = FastAPI(
         title="ontorag-flow",
