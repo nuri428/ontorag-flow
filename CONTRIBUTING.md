@@ -71,9 +71,11 @@ Every PR is held to the same nine CI jobs that protect `main`. The
    right" to "behaves right". See
    [`docs/operator-guide.md`](docs/operator-guide.md) for the
    developer flow.
-4. **Security** — `bandit -r src` (static) and `pip-audit`
-   (vulnerable deps). A failing `pip-audit` blocks the PR — bump
-   the dependency in the same PR or pin a known-safe version.
+4. **Security** — `bandit -r src` (static) blocks the PR on every
+   push. `pip-audit` (vulnerable deps) runs on a separate weekly
+   schedule + manual trigger (Security (deps) workflow) — please run
+   it locally before opening a PR that touches `pyproject.toml`, and
+   bump the dependency or pin a known-safe version if it flags.
 5. **Docker smoke** — the image builds and the new `/health` route
    returns 200. If your change touches the runtime (Dockerfile,
    lifespan, store wiring), run `docker build -t flow . && docker run --rm -p 8100:8100 flow` locally.

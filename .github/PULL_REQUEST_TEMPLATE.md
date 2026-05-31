@@ -41,7 +41,7 @@ Closes #
 - [ ] `uv run ruff check src tests` clean.
 - [ ] `uv run pyright src` clean.
 - [ ] `uv run bandit -q -r src` clean.
-- [ ] `uv run pip-audit` clean (or vulnerable dep bumped in this PR).
+- [ ] `uv run pip-audit` clean locally (or vulnerable dep bumped in this PR). Note: pip-audit no longer runs on every PR — it's on a weekly schedule + manual trigger.
 - [ ] If runtime / Dockerfile / lifespan touched: container builds and
       `/health` returns 200.
 

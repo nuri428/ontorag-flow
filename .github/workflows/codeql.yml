@@ -6,14 +6,14 @@ name: CodeQL
 # Security tab.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  # Personal-project posture: drop push/pull_request triggers because
+  # CodeQL is a slow GitHub-managed analysis (~5–15 min) and a 1-person
+  # repo doesn't benefit from running it on every commit. The weekly
+  # cron still scans against new query packs, so the security floor
+  # stays — only the per-commit latency is removed.
   schedule:
-    # Sunday 03:17 UTC — weekly check independent of activity, so dormant
-    # branches still get scanned against new query packs.
-    - cron: "17 3 * * 0"
+    - cron: "17 3 * * 0"  # Sunday 03:17 UTC
+  workflow_dispatch:
 
 jobs:
   analyze:

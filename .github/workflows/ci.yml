@@ -78,35 +78,6 @@ jobs:
       - name: Run bandit
         run: uv run bandit -r src -c pyproject.toml
 
-  deps:
-    name: Dependency vulnerability scan (pip-audit)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install ${{ env.PYTHON_VERSION }}
-
-      - name: Install all runtime extras so pip-audit sees the full graph
-        # We audit every extra users might install; if any transitive dep
-        # has a CVE in a version we can resolve to, fail the build.
-        run: uv sync --all-extras
-
-      - name: Run pip-audit
-        # --skip-editable skips the ontorag-flow source install itself
-        # (no CVE database for our own package). Exit code is non-zero
-        # when an actual vulnerability is found in a transitive dep —
-        # that's what fails the build. Add --ignore-vuln <GHSA-id>
-        # on a per-CVE basis if a transitive dependency has no fix yet.
-        run: |
-          uv run --with pip-audit pip-audit \
-            --skip-editable --progress-spinner=off
-
   test:
     name: Test (pytest + coverage) — Python ${{ matrix.python }}
     runs-on: ubuntu-latest

@@ -1,0 +1,44 @@
+name: Security (deps)
+
+# Dependency vulnerability scan (pip-audit) extracted from the main CI
+# workflow. Personal-project cadence: weekly cron + manual trigger
+# instead of every push. The security floor stays because:
+#   - GitHub Security Advisories raise vulnerability PRs immediately
+#     out-of-band regardless of this schedule.
+#   - The same scan can be invoked manually before any release tag via
+#     the Actions tab's "Run workflow" button.
+
+on:
+  schedule:
+    - cron: "23 4 * * 1"  # Monday 04:23 UTC
+  workflow_dispatch:
+
+jobs:
+  pip-audit:
+    name: Dependency vulnerability scan (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install all runtime extras so pip-audit sees the full graph
+        # We audit every extra users might install; if any transitive dep
+        # has a CVE in a version we can resolve to, fail the build.
+        run: uv sync --all-extras
+
+      - name: Run pip-audit
+        # --skip-editable skips the ontorag-flow source install itself
+        # (no CVE database for our own package). Exit code is non-zero
+        # when an actual vulnerability is found in a transitive dep.
+        # Add --ignore-vuln <GHSA-id> on a per-CVE basis if a transitive
+        # dependency has no fix yet.
+        run: |
+          uv run --with pip-audit pip-audit \
+            --skip-editable --progress-spinner=off
