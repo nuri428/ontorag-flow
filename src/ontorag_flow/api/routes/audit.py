@@ -12,11 +12,13 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from ontorag_flow.api.deps import get_store
+from ontorag_flow.api.deps import get_case_manager, get_store
+from ontorag_flow.config import get_settings
 from ontorag_flow.core.action import ProvOActivity
+from ontorag_flow.core.case_manager import CaseManager
 from ontorag_flow.stores.sqlite import SqliteStore
 
 router = APIRouter(prefix="/cases", tags=["audit"])
@@ -30,6 +32,31 @@ class AuditAggregateRow(BaseModel):
 
     key: str = Field(description="Group key (action URI, case URI, status, or agent).")
     count: int = Field(description="Number of activities in this bucket.")
+
+
+class AuditPruneRequest(BaseModel):
+    """Inputs for a retention purge."""
+
+    older_than_days: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Window in days; terminal cases with updated_at older than this "
+            "are eligible. Falls back to AUDIT_RETENTION_DAYS when omitted."
+        ),
+    )
+    dry_run: bool = Field(
+        default=False,
+        description="When true, returns the URIs that *would* be pruned without deleting.",
+    )
+
+
+class AuditPruneResponse(BaseModel):
+    """Outcome of a retention purge."""
+
+    older_than_days: int
+    dry_run: bool
+    removed: list[str]
 
 
 @router.get(
@@ -111,3 +138,43 @@ async def aggregate_audit(
     extract = extractors[group_by]
     counts = Counter(key for activity in activities if (key := extract(activity)))
     return [AuditAggregateRow(key=key, count=count) for key, count in counts.most_common()]
+
+
+@aggregate_router.post(
+    "/prune",
+    operation_id="prune_audit",
+    response_model=AuditPruneResponse,
+)
+async def prune_audit(
+    request: AuditPruneRequest,
+    manager: CaseManager = Depends(get_case_manager),
+) -> AuditPruneResponse:
+    """Delete terminal cases (and their activities) past the retention window.
+
+    Designed to be driven from cron: ``curl -X POST .../audit/prune
+    -d '{"older_than_days": 90}'``. Only ``closed`` / ``failed`` cases
+    are eligible — open or suspended cases stay regardless of age.
+
+    When ``older_than_days`` is omitted, falls back to the
+    ``AUDIT_RETENTION_DAYS`` setting; a 422 is returned if neither is
+    provided, so an operator never accidentally runs an "everything"
+    purge by forgetting the window.
+    """
+
+    window = request.older_than_days
+    if window is None:
+        window = get_settings().audit_retention_days
+    if window is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Retention window not specified — pass older_than_days "
+                "or configure AUDIT_RETENTION_DAYS."
+            ),
+        )
+    removed = await manager.prune_audit(older_than_days=window, dry_run=request.dry_run)
+    return AuditPruneResponse(
+        older_than_days=window,
+        dry_run=request.dry_run,
+        removed=removed,
+    )

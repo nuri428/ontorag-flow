@@ -215,3 +215,13 @@ class PostgresStore:
     async def get(self, activity_uri: str) -> ProvOActivity | None:
         row = await self._c.fetchrow("SELECT data FROM activities WHERE uri = $1", activity_uri)
         return ProvOActivity.model_validate_json(row["data"]) if row else None
+
+    async def delete_by_case(self, case_uri: str) -> None:
+        """Remove all activities for the given case (audit retention)."""
+
+        await self._c.execute("DELETE FROM activities WHERE case_uri = $1", case_uri)
+
+    async def delete_case(self, case_uri: str) -> None:
+        """Remove the case row. Call after delete_by_case for FK-safe order."""
+
+        await self._c.execute("DELETE FROM cases WHERE uri = $1", case_uri)

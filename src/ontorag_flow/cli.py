@@ -837,6 +837,45 @@ def audit_export(
     console.print(render(activities, fmt), markup=False, highlight=False)
 
 
+@audit_app.command("prune")
+def audit_prune(
+    older_than: int | None = typer.Option(
+        None,
+        "--older-than",
+        "-d",
+        help=(
+            "Delete terminal (closed/failed) cases whose updated_at is older "
+            "than this many days. Falls back to AUDIT_RETENTION_DAYS when "
+            "unset."
+        ),
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="List cases that would be pruned without deleting anything.",
+    ),
+) -> None:
+    """Prune terminal cases older than the retention window."""
+
+    settings = get_settings()
+    window = older_than if older_than is not None else settings.audit_retention_days
+    if window is None:
+        console.print(
+            "[red]No retention window:[/] pass --older-than N or set AUDIT_RETENTION_DAYS."
+        )
+        raise typer.Exit(code=2)
+    if window < 1:
+        console.print("[red]--older-than must be at least 1 day.[/]")
+        raise typer.Exit(code=2)
+    removed = asyncio.run(
+        _with_manager(lambda m: m.prune_audit(older_than_days=window, dry_run=dry_run))
+    )
+    verb = "Would prune" if dry_run else "Pruned"
+    console.print(f"{verb} {len(removed)} case(s) older than {window} day(s).")
+    for uri in removed:
+        console.print(f"  - {uri}")
+
+
 # --- helpers ---------------------------------------------------------------
 
 

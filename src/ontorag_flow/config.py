@@ -89,6 +89,17 @@ class Settings(BaseSettings):
             "all plugins load (backward-compatible default)."
         ),
     )
+    audit_retention_days: int | None = Field(
+        default=None,
+        alias="AUDIT_RETENTION_DAYS",
+        description=(
+            "Default retention window for `ontorag-flow audit prune` when "
+            "`--older-than` is not supplied. Cases that are closed or failed "
+            "AND whose newest activity is older than this many days are "
+            "deleted (case row + activities). Unset = no default; the CLI "
+            "requires an explicit window."
+        ),
+    )
 
 
 @lru_cache(maxsize=1)

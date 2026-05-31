@@ -217,3 +217,15 @@ class SqliteStore:
         ) as cursor:
             row = await cursor.fetchone()
         return ProvOActivity.model_validate_json(row["data"]) if row else None
+
+    async def delete_by_case(self, case_uri: str) -> None:
+        """Remove all activities for the given case (audit retention)."""
+
+        await self._conn.execute("DELETE FROM activities WHERE case_uri = ?", (case_uri,))
+        await self._conn.commit()
+
+    async def delete_case(self, case_uri: str) -> None:
+        """Remove the case row itself. Call after delete_by_case for FK-safe order."""
+
+        await self._conn.execute("DELETE FROM cases WHERE uri = ?", (case_uri,))
+        await self._conn.commit()

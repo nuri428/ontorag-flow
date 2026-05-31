@@ -9,6 +9,7 @@ to run next is the job of a decision engine (v0.3+). Here the caller chooses.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -483,6 +484,49 @@ class CaseManager:
         )
 
     # --- timer events ------------------------------------------------------
+
+    async def prune_audit(self, *, older_than_days: int, dry_run: bool = False) -> list[str]:
+        """Delete closed/failed cases (and their activities) older than N days.
+
+        Only terminal cases (``closed`` / ``failed``) are eligible — open
+        and suspended cases are work-in-progress, not history. "Age" is
+        measured from ``Case.updated_at``. Returns the list of case URIs
+        that were removed (or *would be* if ``dry_run=True``).
+
+        This is the data side of the operations guide's retention
+        policy. Schedule from cron (``ontorag-flow audit prune
+        --older-than 90``); without scheduling, the audit table grows
+        without bound and eventually presses on disk + backup.
+        """
+
+        cutoff = utcnow() - timedelta(days=older_than_days)
+        removed: list[str] = []
+        # Terminal cases only — walk both terminal statuses.
+        for status in (CaseStatus.CLOSED, CaseStatus.FAILED):
+            cases = await self._cases.find_cases(status=status)
+            for case in cases:
+                if case.updated_at >= cutoff:
+                    continue
+                if dry_run:
+                    removed.append(case.case_uri)
+                    continue
+                # Delete the activities first, then the case row. The order
+                # matters for foreign-key-aware stores (Postgres); SQLite
+                # accepts either.
+                deleter = getattr(self._executor.audit_store, "delete_by_case", None)
+                if deleter is not None:
+                    await deleter(case.case_uri)
+                case_deleter = getattr(self._cases, "delete_case", None)
+                if case_deleter is not None:
+                    await case_deleter(case.case_uri)
+                removed.append(case.case_uri)
+        if removed and not dry_run:
+            logger.info(
+                "Pruned %d terminal case(s) older than %d day(s).",
+                len(removed),
+                older_than_days,
+            )
+        return removed
 
     async def auto_run_all(self) -> list[str]:
         """Auto-execute the top proposal on every open case that passes the gate.
