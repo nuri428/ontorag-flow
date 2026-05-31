@@ -22,12 +22,19 @@ WORKDIR /app
 # uv sync touches the project (hatchling reads them during metadata).
 COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev --no-editable
 
 # Then the source + install the project itself.
+# --no-editable forces a wheel build instead of an editable install. Two
+# reasons: (1) production containers don't need source-mounting, a wheel
+# is the right artifact; (2) uv's editable build path runs hatchling in
+# an isolated temp dir that doesn't carry over our PEP 639
+# `license = { file = "LICENSE" }` reference, so the build fails with
+# "License file does not exist: LICENSE". The wheel build resolves the
+# file from the project root before isolation kicks in.
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --no-editable
 
 # Optional extras are opt-in at build time:
 #   docker build --build-arg INSTALL_EXTRAS="postgres llm" .
@@ -35,7 +42,7 @@ ARG INSTALL_EXTRAS=""
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ -n "$INSTALL_EXTRAS" ]; then \
         for extra in $INSTALL_EXTRAS; do \
-            uv sync --frozen --no-dev --extra "$extra"; \
+            uv sync --frozen --no-dev --no-editable --extra "$extra"; \
         done; \
     fi
 
