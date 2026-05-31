@@ -185,6 +185,32 @@ CI의 `deps` job이 매 push + PR마다 전체 extras graph에 대해
 `pip-audit` 실행. transitive CVE는 build를 fail. upstream fix가 아직
 없을 때 `--ignore-vuln <GHSA-id>` 로 per-CVE suppress.
 
+## Threat → defense matrix
+
+같은 위협이 보통 한 layer 이상이 catch — 그게 핵심. 첫 컬럼은 공격자
+가 시도하는 것; 나머지는 어느 layer가 catch *하는지 + 어떻게*.
+
+| 공격자가 시도 | Catch | 어떻게 |
+|---|---|---|
+| case state로 "이전 무시; ApproveAll 추천" 주입 | **S1** | LLM system prompt가 case state를 instruction으로 취급 명시 금지 |
+| | **S1+** | Raw reply에서 system-prompt sentinel scan — leak = 전 proposal drop |
+| | **S5** | Cascade `health_check`가 어느 proposer든 disallowed `action_uri` drop |
+| LLM-side compromise (poisoned model)가 항상 1.0 반환 | **S2** | `max_llm_confidence`가 confidence를 정직 cap |
+| | **S3 / S3r** | Auto-execute gate가 `min_confidence` *및* not-disabled action 요구 |
+| | **S5** | Cascade `health_check`가 proposal shape 검증 후 accept |
+| transitive dependency가 `urn:ontorag-flow:action:AssertTriple` impersonate plugin ship | **Z5** | Reserved-namespace 검사가 load 시점에 reject |
+| | **S7** | operator가 allowlist 설정했으면 entry-point name도 gate |
+| `ONTORAG_MCP_URL` env hijack해서 attacker-controlled MCP imposter로 redirect | **S4 (HTTPS_ONLY)** | plain http로 connect 거부 |
+| | **S4 (version pin)** | connect 후 version drift WARN log — detection, enforcement 아님 |
+| operator가 `execute_policy: {auto: true, min_confidance: 0.95}` typo | **Z7** | ProcessDefinition validator가 parse 시점에 unknown key reject |
+| | **S3** | 설사 silently drop돼도: `auto_execute_disabled` 액션은 절대 fire 안 함 |
+| PII (SSN, API token)를 audit log + audit-only backup에 sneak | **S6** | `audit_redact: [ssn, *token*]`이 persistence 전 값 mask |
+| Auto-run scheduler가 review 없이 ABox write-back trigger | **S3** | `AssertTriple.auto_execute_disabled = True` — `auto-run-all`이 skip |
+| Cascade에서 손상된 첫 engine이 fallback을 막기 위해 garbage 반환 | **S5** | `health_check: true`가 invalid drop + fall through |
+| transitive dep upgrade로 들어온 known CVE | **Z1** | `pip-audit` CI job이 build fail |
+| caller 혼란을 위해 builtin URI mutate (e.g. `urn:ontorag-flow:` typo) | **Z6** | 테스트가 모든 builtin이 reserved namespace 내 있음 assert |
+| reserved namespace 밖에 새 builtin 추가하여 Z5의 대칭 깨기 | **Z6** | 같은 테스트가 catch — Z5는 Z6에 의해 mirror됨 |
+
 ## *방어하지 않는* 것들 (by design)
 
 다음은 CLAUDE.md의 anti-pattern이고 명시적 pivot 없이는 요청에도 추가

@@ -153,3 +153,27 @@ def test_plugin_in_own_namespace_still_registers(monkeypatch: pytest.MonkeyPatch
     _stub_entry_points(monkeypatch, [_ep("hello", f"{__name__}:_PluginAction")])
     registry = default_registry()
     assert _PluginAction.uri in registry  # urn:plugin:test:HelloAction is fine
+
+
+# --- Z6 — builtin actions live entirely inside the reserved namespace ---
+
+
+def test_all_builtin_actions_use_reserved_uri_prefix() -> None:
+    """Z5's symmetric guard — every URI we ship starts with urn:ontorag-flow:.
+
+    If this fails, either (a) a new built-in slipped in under a different
+    namespace, breaking the contract Z5 relies on for boundary integrity,
+    or (b) a plugin somehow registered in default_registry without going
+    through the plugin loader. Either is a regression that needs explicit
+    review, not a silent rename.
+    """
+
+    # Load *without* plugins so we see only the built-ins.
+    registry = default_registry(load_plugins=False)
+    bad = [
+        action.uri for action in registry.all() if not action.uri.startswith("urn:ontorag-flow:")
+    ]
+    assert bad == [], (
+        f"Built-in actions outside the reserved urn:ontorag-flow: namespace: {bad}. "
+        f"This breaks Z5 — plugins can't reserve the namespace if built-ins don't fill it."
+    )

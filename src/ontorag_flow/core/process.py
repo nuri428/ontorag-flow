@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 
 class ProcessParseError(ValueError):
@@ -142,6 +142,62 @@ class ProcessDefinition(BaseModel):
         """Whether an action is permitted in this process."""
 
         return action_uri in self.allowed_actions
+
+    @model_validator(mode="after")
+    def _check_security_shapes(self) -> ProcessDefinition:
+        """Reject typos in execute_policy / audit_redact / arbitration.
+
+        These three free-form dict fields are intentionally untyped at
+        the Pydantic level (security hardening shape rules came after the
+        existing usages), but a silent ignore of unknown keys masks real
+        configuration drift — operator writes ``min_confidance: 0.9`` and
+        the gate runs with the default 0.0, every action auto-fires.
+
+        Allow-list each shape's keys and validate types; fail loudly here
+        rather than at engine-call time.
+        """
+
+        if self.execute_policy:
+            allowed = {"auto", "min_confidence"}
+            unknown = set(self.execute_policy) - allowed
+            if unknown:
+                raise ValueError(
+                    f"execute_policy has unknown keys {sorted(unknown)}; "
+                    f"expected only {sorted(allowed)}."
+                )
+            auto = self.execute_policy.get("auto")
+            if auto is not None and not isinstance(auto, bool):
+                raise ValueError(f"execute_policy.auto must be bool; got {type(auto).__name__}.")
+            mc = self.execute_policy.get("min_confidence")
+            if mc is not None and (not isinstance(mc, int | float) or not 0.0 <= float(mc) <= 1.0):
+                raise ValueError(
+                    f"execute_policy.min_confidence must be a number in [0, 1]; got {mc!r}."
+                )
+
+        for pattern in self.audit_redact:
+            # Pydantic typing already says list[str], but a YAML-driven
+            # construction can slip non-strings through field-level Any
+            # validation in older clients; the runtime guard is the backstop.
+            if not isinstance(pattern, str) or not pattern.strip():  # type: ignore[reportUnnecessaryIsInstance]
+                raise ValueError(
+                    f"audit_redact entries must be non-empty strings; got {pattern!r}."
+                )
+
+        if self.arbitration:
+            allowed_arb = {"proposer", "validator", "sequence", "health_check"}
+            unknown_arb = set(self.arbitration) - allowed_arb
+            if unknown_arb:
+                raise ValueError(
+                    f"arbitration has unknown keys {sorted(unknown_arb)}; "
+                    f"expected only {sorted(allowed_arb)}."
+                )
+            seq = self.arbitration.get("sequence")
+            if seq is not None and (
+                not isinstance(seq, list) or not all(isinstance(x, str) for x in seq)
+            ):
+                raise ValueError(f"arbitration.sequence must be a list of strings; got {seq!r}.")
+
+        return self
 
 
 def load_process(path: str | Path) -> ProcessDefinition:
