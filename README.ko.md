@@ -2,6 +2,18 @@
 
 > **[English](README.md) | 한국어**
 
+![status](https://img.shields.io/badge/status-personal--exploration-orange)
+![python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)
+![license](https://img.shields.io/badge/license-MIT-green)
+![docs](https://img.shields.io/badge/docs-mkdocs-blue?link=https%3A%2F%2Fnuri428.github.io%2Fontorag-flow%2F)
+
+> ⚠️ **개인 탐구용 프로젝트입니다. 지원되는 제품이 아닙니다.** ontorag-flow는
+> 온톨로지 기반 적응형 케이스 관리를 평가하기 위한 1인 오픈소스 프로젝트입니다.
+> MIT 라이선스로 자유롭게 fork / 읽기 / 적용 가능하지만, **프로덕션 지원 없음,
+> SLA 없음, 하위 호환성 보장 없음** 입니다. 사용 시 commit 을 pin 하고, 자체
+> threat model 로 검증한 뒤, fork 를 직접 소유해 운영하세요. Issue / PR 은
+> best-effort 로 확인합니다.
+
 > **온톨로지 기반 적응형 케이스 관리(Adaptive Case Management) — [ontorag](https://github.com/ontorag) 위의 Kinetic 레이어.**
 > ontorag가 *"무엇이 있고 우리가 무엇을 믿는가"* 라면, ontorag-flow는 *"그것에 대해 무엇을 할 것인가"* 입니다.
 

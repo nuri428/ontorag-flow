@@ -2,6 +2,19 @@
 
 > **English | [한국어](README.ko.md)**
 
+![status](https://img.shields.io/badge/status-personal--exploration-orange)
+![python](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)
+![license](https://img.shields.io/badge/license-MIT-green)
+![docs](https://img.shields.io/badge/docs-mkdocs-blue?link=https%3A%2F%2Fnuri428.github.io%2Fontorag-flow%2F)
+
+> ⚠️ **Personal exploration, not a supported product.** ontorag-flow is a
+> solo open-source project for evaluating ontology-grounded adaptive case
+> management. The code is MIT-licensed and you are welcome to fork, read,
+> and adapt it — but there is **no production support, no SLA, and no
+> commitment to backwards compatibility**. Pin a commit, validate it
+> against your own threat model, and own the resulting fork. Issues and
+> PRs are read on a best-effort basis.
+
 > **Ontology-grounded adaptive case management — the Kinetic layer over [ontorag](https://github.com/ontorag).**
 > If ontorag is *"what is and what we believe"*, ontorag-flow is *"what we do about it"*.
 
