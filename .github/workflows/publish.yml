@@ -1,0 +1,101 @@
+name: Publish to PyPI
+
+# Tag-driven publish. The maintainer creates a tag matching v* (e.g. v0.1.1)
+# *after* the GitHub Release for that tag exists, and this workflow ships
+# the sdist + wheel to PyPI via the OIDC trusted-publisher flow.
+#
+# One-time setup on PyPI (https://pypi.org/manage/account/publishing/):
+#   - Project: ontorag-flow
+#   - Owner:   nuri428
+#   - Repo:    ontorag-flow
+#   - Workflow file name: publish.yml
+#   - Environment: pypi
+#
+# OIDC means no API token lives in repo secrets. Anyone with push-tag rights
+# on this repo can trigger a release; protect the `pypi` environment with
+# required reviewers if that's too loose for your project.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (e.g. v0.1.1). The tag must already point at the commit you want shipped."
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build sdist and wheel
+        run: |
+          uv build --sdist --wheel
+          ls -la dist/
+
+      - name: Validate metadata
+        run: uvx twine check dist/*
+
+      - name: Upload built artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to PyPI (OIDC)
+    needs: build
+    runs-on: ubuntu-latest
+    # The OIDC token is minted only inside the `pypi` environment, so even
+    # if a workflow file is malicious, it can't publish without a job that
+    # explicitly enters this environment.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/ontorag-flow/
+    permissions:
+      # Required for the trusted-publisher OIDC token exchange.
+      id-token: write
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI via Trusted Publisher
+        # Pin the major version; the project's own SemVer handles minor bumps.
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # No `password:` — that's the entire point of OIDC. The action
+          # exchanges the GitHub-issued id-token for a short-lived PyPI
+          # upload credential.
+          packages-dir: dist
+          # Don't error if the version already exists on PyPI — useful when
+          # re-running a partial publish.
+          skip-existing: true
+          # Print metadata before upload so the log shows what's about to ship.
+          verbose: true
