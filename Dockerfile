@@ -18,8 +18,9 @@ WORKDIR /app
 
 # Resolve and install dependencies first (cacheable layer — only changes
 # when manifests change). pyproject's [project.readme] points at README.md
-# so copy that too.
-COPY pyproject.toml uv.lock README.md ./
+# and [project.license] points at LICENSE — both must be present before
+# uv sync touches the project (hatchling reads them during metadata).
+COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
