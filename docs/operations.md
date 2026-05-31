@@ -157,6 +157,159 @@ investigate first.
 - [ ] Backup logs / output captured somewhere — silent backup
   failures are how data loss happens.
 
+## Retention — pruning the audit table
+
+The audit log is append-only; without a purge it grows linearly with
+case activity and eventually presses on disk + backup time. The
+``ontorag-flow audit prune`` command + ``POST /audit/prune`` endpoint
+delete *terminal* cases (``closed`` / ``failed``) whose ``updated_at``
+is older than the configured window. Open and suspended cases are
+never touched.
+
+CLI:
+
+```bash
+# One-off prune — 90 days is a reasonable default for most teams.
+ontorag-flow audit prune --older-than 90
+
+# Dry run first when introducing retention to an existing system.
+ontorag-flow audit prune --older-than 90 --dry-run
+```
+
+Set the default window once via ``AUDIT_RETENTION_DAYS`` and the CLI /
+API both honour it when no explicit ``--older-than`` is passed.
+
+Schedule from cron / k8s CronJob — never from inside the server
+process, so a slow purge can't block request handling:
+
+```cron
+# 03:10 daily — prune anything terminal that's older than 90 days.
+10 3 * * *  /usr/local/bin/ontorag-flow audit prune --older-than 90 >> /var/log/ontorag-flow-prune.log 2>&1
+```
+
+For a remote operator without shell access, drive it via the API
+(combine with auth at the reverse proxy):
+
+```bash
+curl -fsS -X POST http://localhost:8100/audit/prune \
+  -H 'content-type: application/json' \
+  -d '{"older_than_days": 90}'
+```
+
+Always pair the first prune run with a backup taken **just before** —
+prune is intentionally destructive (cases + activities both go).
+
+## Rate limiting in front of the API
+
+ontorag-flow has no built-in rate limiter (single-tenant assumption).
+Public deployments must put a reverse proxy in front that authenticates
+*and* limits. Two minimal examples below — both are starting points,
+not turn-key configs.
+
+### Nginx
+
+```nginx
+http {
+    # 10 requests/second average, burst 20, no delay on burst.
+    limit_req_zone $binary_remote_addr zone=flow_api:10m rate=10r/s;
+
+    upstream ontorag_flow {
+        server 127.0.0.1:8100;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name flow.example.com;
+
+        location / {
+            limit_req zone=flow_api burst=20 nodelay;
+            proxy_pass http://ontorag_flow;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Health probes bypass the rate limit so a flapping deploy
+        # never starves k8s liveness.
+        location = /health {
+            proxy_pass http://ontorag_flow/health;
+        }
+    }
+}
+```
+
+### Caddy
+
+```caddyfile
+flow.example.com {
+    # Caddy's rate_limit plugin is third-party — install with xcaddy.
+    rate_limit {
+        zone flow_api {
+            key {remote_host}
+            events 600
+            window 1m
+        }
+    }
+
+    handle /health* {
+        reverse_proxy 127.0.0.1:8100
+    }
+
+    handle {
+        rate_limit flow_api
+        reverse_proxy 127.0.0.1:8100
+    }
+}
+```
+
+Tune limits per workload. A human-operator console rarely exceeds
+10 req/min; an automation tool calling ``execute_action`` in a loop
+may need 100 req/s. Start strict, observe, loosen.
+
+## Structured logs (JSON)
+
+The default formatter is human-readable for local development. In
+production, ship JSON so a log collector (Loki, CloudWatch, Datadog)
+can index by field rather than regex against a free-text line.
+
+ontorag-flow emits to the standard ``logging`` module; configure a
+JSON formatter at process start. Minimal recipe using ``python-json-logger``:
+
+```bash
+pip install python-json-logger
+```
+
+```python
+# logging_config.py — load once, before ontorag_flow imports anything.
+import logging
+from pythonjsonlogger import jsonlogger
+
+handler = logging.StreamHandler()
+handler.setFormatter(
+    jsonlogger.JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s",
+        rename_fields={"asctime": "ts", "levelname": "level", "name": "logger"},
+    )
+)
+root = logging.getLogger()
+root.handlers[:] = [handler]
+root.setLevel(logging.INFO)
+```
+
+Drive it with an env-var switch so dev keeps the human formatter:
+
+```bash
+# In the systemd unit / Docker entrypoint:
+PYTHONSTARTUP=/etc/ontorag-flow/logging_config.py \
+    ontorag-flow serve --port 8100
+```
+
+What to index: ``logger``, ``level``, ``case_uri``, ``action_uri``,
+``activity_uri`` — the case manager and executor already include
+these in their log records via positional args, so the JSON formatter
+captures them automatically.
+
 ## What this guide does *not* cover
 
 - **High availability / failover.** Single-node assumption matches
@@ -166,3 +319,6 @@ investigate first.
 - **ontorag side backups.** Only the ABox state ontorag-flow writes
   back (via `AssertTriple`) lives there. Backup of ontorag's own
   store is documented in ontorag's repo, not here.
+- **Authentication.** Same single-tenant posture — terminate
+  auth at the reverse proxy (basic auth, OIDC, mTLS, your platform's
+  IAP). The rate-limit snippets above are the spot to add it.

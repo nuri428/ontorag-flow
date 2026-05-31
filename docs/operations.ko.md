@@ -149,6 +149,156 @@ curl -fsS http://localhost:8100/ui/ > /dev/null
 - [ ] 백업 로그 / output 어딘가에 캡처 — silent 백업 실패가 데이터
   손실의 흔한 원인.
 
+## 보존 — audit 테이블 정리
+
+Audit log는 append-only입니다. 정리하지 않으면 케이스 활동에 선형
+비례해 자라며 결국 디스크와 백업 시간을 압박합니다.
+``ontorag-flow audit prune`` 명령과 ``POST /audit/prune`` 엔드포인트는
+``updated_at``이 설정된 윈도우보다 오래된 *종료* 케이스 (``closed`` /
+``failed``)를 삭제합니다. ``open``과 ``suspended`` 케이스는 절대 손대지
+않습니다.
+
+CLI:
+
+```bash
+# 일회성 prune — 90일이 대부분의 팀에 합리적인 기본값.
+ontorag-flow audit prune --older-than 90
+
+# 기존 시스템에 retention을 도입할 때는 먼저 dry-run.
+ontorag-flow audit prune --older-than 90 --dry-run
+```
+
+기본 윈도우를 한 번 ``AUDIT_RETENTION_DAYS``로 설정하면, CLI와 API 모두
+``--older-than``이 명시되지 않을 때 이 값을 따릅니다.
+
+cron / k8s CronJob에서 스케줄하세요 — 서버 프로세스 *내부*에서 돌리지
+않아야 느린 purge가 요청 처리를 막지 않습니다:
+
+```cron
+# 매일 03:10 — 90일 이상 종료된 모든 것을 prune.
+10 3 * * *  /usr/local/bin/ontorag-flow audit prune --older-than 90 >> /var/log/ontorag-flow-prune.log 2>&1
+```
+
+shell 접근이 없는 원격 운영자라면 API로 (auth는 reverse proxy에서):
+
+```bash
+curl -fsS -X POST http://localhost:8100/audit/prune \
+  -H 'content-type: application/json' \
+  -d '{"older_than_days": 90}'
+```
+
+첫 prune 실행 직전에는 반드시 백업과 짝지으세요 — prune은 의도적으로
+파괴적입니다 (케이스 + 활동 모두 삭제).
+
+## API 앞단 rate limiting
+
+ontorag-flow에는 빌트인 rate limiter가 없습니다 (single-tenant 가정).
+공개 배포는 인증과 제한을 모두 수행하는 reverse proxy를 앞에 두어야
+합니다. 아래 두 예제는 출발점이지 turn-key 설정이 아닙니다.
+
+### Nginx
+
+```nginx
+http {
+    # 평균 10 req/s, burst 20, burst에 delay 없음.
+    limit_req_zone $binary_remote_addr zone=flow_api:10m rate=10r/s;
+
+    upstream ontorag_flow {
+        server 127.0.0.1:8100;
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name flow.example.com;
+
+        location / {
+            limit_req zone=flow_api burst=20 nodelay;
+            proxy_pass http://ontorag_flow;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Health probe는 rate limit 우회 — 배포 중 flapping이 k8s
+        # liveness를 굶기지 않도록.
+        location = /health {
+            proxy_pass http://ontorag_flow/health;
+        }
+    }
+}
+```
+
+### Caddy
+
+```caddyfile
+flow.example.com {
+    # Caddy rate_limit 플러그인은 third-party — xcaddy로 설치.
+    rate_limit {
+        zone flow_api {
+            key {remote_host}
+            events 600
+            window 1m
+        }
+    }
+
+    handle /health* {
+        reverse_proxy 127.0.0.1:8100
+    }
+
+    handle {
+        rate_limit flow_api
+        reverse_proxy 127.0.0.1:8100
+    }
+}
+```
+
+워크로드 별로 limit을 튜닝하세요. 사람 운영자 콘솔은 보통 10 req/min
+초과하지 않습니다. ``execute_action``을 루프로 호출하는 자동화 도구는
+100 req/s가 필요할 수 있습니다. 엄격하게 시작해 관측 후 완화하세요.
+
+## 구조화된 로그 (JSON)
+
+기본 formatter는 로컬 개발용 사람-가독 포맷입니다. 프로덕션에서는
+JSON을 출력해 로그 수집기 (Loki, CloudWatch, Datadog)가 필드 단위로
+인덱싱하게 하세요. 자유 텍스트 라인을 regex로 잡지 마세요.
+
+ontorag-flow는 표준 ``logging`` 모듈로 출력합니다. 프로세스 시작 시
+JSON formatter를 설정하면 됩니다. ``python-json-logger`` 사용 최소 레시피:
+
+```bash
+pip install python-json-logger
+```
+
+```python
+# logging_config.py — ontorag_flow import 전에 한 번 load.
+import logging
+from pythonjsonlogger import jsonlogger
+
+handler = logging.StreamHandler()
+handler.setFormatter(
+    jsonlogger.JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s",
+        rename_fields={"asctime": "ts", "levelname": "level", "name": "logger"},
+    )
+)
+root = logging.getLogger()
+root.handlers[:] = [handler]
+root.setLevel(logging.INFO)
+```
+
+env-var 스위치로 dev는 사람 포맷 유지:
+
+```bash
+# systemd unit / Docker entrypoint에서:
+PYTHONSTARTUP=/etc/ontorag-flow/logging_config.py \
+    ontorag-flow serve --port 8100
+```
+
+인덱싱할 필드: ``logger``, ``level``, ``case_uri``, ``action_uri``,
+``activity_uri`` — case manager와 executor가 이미 positional args로
+log record에 포함하므로 JSON formatter가 자동으로 캡처합니다.
+
 ## 이 가이드가 *다루지 않는* 것
 
 - **고가용성 / failover.** Single-node 가정은 CLAUDE.md anti-pattern
@@ -158,3 +308,6 @@ curl -fsS http://localhost:8100/ui/ > /dev/null
 - **ontorag 측 백업.** ontorag-flow가 `AssertTriple`로 write-back한
   ABox 상태만 그쪽에 있습니다. ontorag 자체 store 백업은 ontorag 저장소
   문서를 참조하세요.
+- **인증.** 같은 single-tenant 자세 — auth는 reverse proxy에서 종료
+  (basic auth, OIDC, mTLS, 플랫폼 IAP). 위 rate-limit 스니펫이 auth를
+  추가할 위치입니다.
