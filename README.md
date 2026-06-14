@@ -301,6 +301,25 @@ With `CONNECT_ONTORAG=true` and ontorag v0.7+/v0.8+ reachable, the
 Bayesian and Causal engines become available; without it, only the
 local-only engines (rule, llm, human) work.
 
+### Integration tests
+
+Tests that require a live ontorag instance and Fuseki are marked
+`integration` and deselected by default:
+
+```bash
+# unit tests only (no live backend needed)
+uv run pytest -m "not integration"
+
+# full suite including live ontorag HTTP MCP (localhost:8000) + Fuseki (localhost:3030)
+ontorag serve &          # ontorag must be running first
+uv run pytest -m integration
+```
+
+The `integration` mark covers:
+- `AssertTriple` / `RetractTriple` ABox write-back via ontorag HTTP MCP
+- Saga compensation (retract on rollback, re-assert on inverse rollback)
+- `PostgresStore` round-trip (requires `docker compose --profile postgres up`)
+
 ## Examples & tools
 
 A condensed map of "what you can do with this repo and how". Detailed

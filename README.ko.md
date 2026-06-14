@@ -301,6 +301,25 @@ CONNECT_ONTORAG=true ontorag-flow serve
 Causal 엔진이 사용 가능해집니다; 그렇지 않으면 local-only 엔진(rule, llm,
 human)만 동작합니다.
 
+### Integration 테스트
+
+라이브 ontorag 인스턴스와 Fuseki가 필요한 테스트는 `integration` 마크로 표시되며
+기본값으로 제외됩니다:
+
+```bash
+# 유닛 테스트만 (라이브 백엔드 불필요)
+uv run pytest -m "not integration"
+
+# 라이브 ontorag HTTP MCP(localhost:8000) + Fuseki(localhost:3030) 포함 전체 실행
+ontorag serve &          # ontorag를 먼저 실행
+uv run pytest -m integration
+```
+
+`integration` 마크 대상:
+- `AssertTriple` / `RetractTriple` ABox write-back via ontorag HTTP MCP
+- Saga 보상 (롤백 시 retract, 역방향 롤백 시 re-assert)
+- `PostgresStore` 라운드트립 (`docker compose --profile postgres up` 필요)
+
 ## 예제 & 도구
 
 "이 저장소로 무엇을 할 수 있고 어떻게 하는가"의 압축 지도. 자세한 동작은
