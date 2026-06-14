@@ -396,6 +396,14 @@ human)만 동작합니다.
 - [`examples/bayesian_demo/`](examples/bayesian_demo/) — in-process fake
   ontorag MCP fixture에 대해 Bayesian 엔진 구동.
 
+## 관련 프로젝트
+
+| 레포 | 레이어 | 역할 |
+|---|---|---|
+| [ontorag](https://github.com/nuri428/ontorag) | Semantic + Dynamic | RDF/OWL 그래프 · Bayesian · Causal · MCP 툴 |
+| **ontorag-flow** *(이 레포)* | Kinetic | 적응형 케이스 관리 · 액션 오케스트레이션 · PROV-O 감사 로그 |
+| [ontorag-memory](https://github.com/nuri428/ontorag-memory) | 에이전트 메모리 | Claude Code, Hermes 등 MCP 에이전트를 위한 온톨로지 기반 장기 메모리 |
+
 ## 라이선스
 
 MIT. ontorag와 동일.

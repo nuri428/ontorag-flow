@@ -400,6 +400,14 @@ docstrings; this section is the index.
 - [`examples/bayesian_demo/`](examples/bayesian_demo/) — Bayesian
   engine running against an in-process fake ontorag MCP fixture.
 
+## Related projects
+
+| Repo | Layer | Role |
+|---|---|---|
+| [ontorag](https://github.com/nuri428/ontorag) | Semantic + Dynamic | RDF/OWL graph · Bayesian · Causal · MCP tools |
+| **ontorag-flow** *(this repo)* | Kinetic | Adaptive Case Management · action orchestration · PROV-O audit |
+| [ontorag-memory](https://github.com/nuri428/ontorag-memory) | Agent memory | Ontology-backed persistent memory for Claude Code, Hermes, and any MCP agent |
+
 ## License
 
 MIT. Same as ontorag.
