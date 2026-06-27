@@ -50,6 +50,26 @@ constraints:
       requires: "urn:ontorag-flow:action:UpdateCaseProperty"  # rca 완료 후 기록
 
 rules:
+  # ── Stage: detected — 선행 조건 검증 ─────────────────────────────────────
+  - name: "인시던트 URI 미설정 → 입력 요청"
+    when:
+      stage: "detected"
+      incident_uri:
+        eq: ""
+    then:
+      action: "urn:ontorag-flow:action:RequestHumanReview"
+      params:
+        reason: >
+          incident_uri가 비어 있습니다.
+          UpdateCaseProperty로 'incident_uri'를 설정한 후 진행해 주세요.
+          형식: urn:ag:incident:YYYY-MM-DD:slug
+          (예: urn:ag:incident:2026-06-27:api-timeout)
+    confidence: 0.99
+    rationale: >
+      AssertTriple 실행 시 빈 subject URI 전달을 방지한다.
+      incident_uri는 케이스 생성 시 --initial-state incident_uri=... 로 제공하거나
+      첫 UpdateCaseProperty 액션으로 설정해야 한다.
+
   # ── Stage: detected → triaged ─────────────────────────────────────────────
   - name: "새 인시던트 → 트리아지 시작"
     when:
@@ -103,6 +123,8 @@ rules:
     when:
       stage: "rca_done"
       root_cause:
+        ne: ""
+      incident_uri:
         ne: ""
     then:
       action: "urn:ontorag-flow:action:AssertTriple"
