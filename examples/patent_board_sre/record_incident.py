@@ -15,7 +15,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime
+
+logger = logging.getLogger(__name__)
 
 
 async def record_incident(
@@ -88,13 +91,12 @@ async def record_incident(
             },
         ])
 
-        print(f"저장된 트리플: {saved}개")
-        print(f"인시던트 URI: {incident_uri}")
+        logger.info("저장된 트리플: %d개", saved)
+        logger.info("인시던트 URI: %s", incident_uri)
 
         # 요약 확인
         summary = await mem.summarize(incident_uri)
-        print("\n--- 요약 ---")
-        print(summary)
+        logger.info("\n--- 요약 ---\n%s", summary)
 
         # patent-board와 연결된 인시던트 조회 (전이적 순회)
         related = await mem.find_related(
@@ -104,9 +106,9 @@ async def record_incident(
             limit=10,
         )
         incident_uris = [r["uri"] for r in related if "incident" in r["uri"]]
-        print(f"\npatent-board 관련 인시던트: {len(incident_uris)}개")
+        logger.info("patent-board 관련 인시던트: %d개", len(incident_uris))
         for uri in incident_uris:
-            print(f"  {uri}")
+            logger.info("  %s", uri)
 
     return incident_uri
 
@@ -117,14 +119,15 @@ async def search_similar_incidents(keyword: str) -> None:
 
     async with await MemoryClient.create() as mem:
         results = await mem.search_by_rationale(keyword, limit=10)
-        print(f"\n'{keyword}' 관련 과거 인시던트 ({len(results)}개):")
+        logger.info("'%s' 관련 과거 인시던트 (%d개):", keyword, len(results))
         for r in results:
             if "incident" in r["subject"]:
-                print(f"  {r['subject']}")
-                print(f"    {r['snippet'][:80]}")
+                logger.info("  %s", r["subject"])
+                logger.info("    %s", r["snippet"][:80])
 
 
 async def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     # 샘플 인시던트 기록
     incident_uri = await record_incident(
         slug="api-timeout-patent-search",
@@ -142,7 +145,7 @@ async def main() -> None:
         affected_users=142,
     )
 
-    print(f"\n기록 완료: {incident_uri}")
+    logger.info("기록 완료: %s", incident_uri)
 
     # 유사 인시던트 검색 (Fuseki 키워드)
     await search_similar_incidents("Fuseki")
