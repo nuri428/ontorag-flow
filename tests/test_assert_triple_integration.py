@@ -15,8 +15,8 @@ from ontorag_flow.core.action import SideEffectKind
 from ontorag_flow.core.state import EMPTY_STATE
 from tests._mcp_fixture import InProcessMcpServer
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _fake_ontorag(captured: list[dict]) -> InProcessMcpServer:
     """assert_triple / retract_triple 호출을 기록하는 fake MCP 서버."""
@@ -25,24 +25,28 @@ def _fake_ontorag(captured: list[dict]) -> InProcessMcpServer:
         def _handler(args: dict[str, Any]) -> dict:
             captured.append({"tool": name, **args})
             return {"status": name.replace("_", "d "), "triple": args}
+
         return _handler
 
-    return InProcessMcpServer({
-        "assert_triple":  _responder("assert_triple"),
-        "retract_triple": _responder("retract_triple"),
-    })
+    return InProcessMcpServer(
+        {
+            "assert_triple": _responder("assert_triple"),
+            "retract_triple": _responder("retract_triple"),
+        }
+    )
 
 
 # ── Unit 테스트 — fake ontorag ────────────────────────────────────────────────
 
+
 class TestAssertTripleAction:
     def test_declares_abox_write_side_effect(self) -> None:
         from unittest.mock import MagicMock
+
         action = AssertTriple(MagicMock())
         assert SideEffectKind.ABOX_WRITE in action.side_effects
 
     def test_auto_execute_disabled(self) -> None:
-        from unittest.mock import MagicMock
         assert AssertTriple.auto_execute_disabled is True
         assert RetractTriple.auto_execute_disabled is True
 
@@ -52,15 +56,18 @@ class TestAssertTripleAction:
         server.start()
 
         from ontorag_flow.ontorag_client.client import OntoragClient
+
         client = OntoragClient(server.url)
         await client.connect()
 
         action = AssertTriple(client)
-        params = action.input_schema.model_validate({
-            "subject":   "urn:test:s",
-            "predicate": "urn:test:p",
-            "object":    "hello world",
-        })
+        params = action.input_schema.model_validate(
+            {
+                "subject": "urn:test:s",
+                "predicate": "urn:test:p",
+                "object": "hello world",
+            }
+        )
         result = await action.execute(params, EMPTY_STATE)
 
         assert result.success is True
@@ -78,8 +85,9 @@ class TestAssertTripleAction:
         server = _fake_ontorag(captured)
         server.start()
 
-        from ontorag_flow.ontorag_client.client import OntoragClient
         from ontorag_flow.core.action import ActionResult
+        from ontorag_flow.ontorag_client.client import OntoragClient
+
         client = OntoragClient(server.url)
         await client.connect()
 
@@ -88,10 +96,10 @@ class TestAssertTripleAction:
             action_uri=AssertTriple.uri,
             success=True,
             outputs={
-                "subject":   "urn:test:s",
+                "subject": "urn:test:s",
                 "predicate": "urn:test:p",
-                "object":    "hello world",
-                "graph":     None,
+                "object": "hello world",
+                "graph": None,
                 "operation": "assert",
             },
         )
@@ -109,8 +117,9 @@ class TestAssertTripleAction:
         server = _fake_ontorag(captured)
         server.start()
 
-        from ontorag_flow.ontorag_client.client import OntoragClient
         from ontorag_flow.core.action import ActionResult
+        from ontorag_flow.ontorag_client.client import OntoragClient
+
         client = OntoragClient(server.url)
         await client.connect()
 
@@ -119,10 +128,10 @@ class TestAssertTripleAction:
             action_uri=RetractTriple.uri,
             success=True,
             outputs={
-                "subject":   "urn:test:s",
+                "subject": "urn:test:s",
                 "predicate": "urn:test:p",
-                "object":    "hello world",
-                "graph":     None,
+                "object": "hello world",
+                "graph": None,
                 "operation": "retract",
             },
         )
@@ -139,16 +148,19 @@ class TestAssertTripleAction:
         server.start()
 
         from ontorag_flow.ontorag_client.client import OntoragClient
+
         client = OntoragClient(server.url)
         await client.connect()
 
         action = AssertTriple(client)
-        params = action.input_schema.model_validate({
-            "subject":   "urn:test:s",
-            "predicate": "urn:test:p",
-            "object":    "val",
-            "graph":     "urn:custom:graph",
-        })
+        params = action.input_schema.model_validate(
+            {
+                "subject": "urn:test:s",
+                "predicate": "urn:test:p",
+                "object": "val",
+                "graph": "urn:custom:graph",
+            }
+        )
         await action.execute(params, EMPTY_STATE)
 
         assert captured[0].get("graph") == "urn:custom:graph"
@@ -159,17 +171,19 @@ class TestAssertTripleAction:
 
 # ── Integration 테스트 — 실제 ontorag HTTP MCP ────────────────────────────────
 
+
 @pytest.mark.integration
 async def test_assert_triple_live_roundtrip() -> None:
     """AssertTriple 액션 → ontorag HTTP MCP → Fuseki 저장 → SPARQL 검증."""
     import httpx
+
     from ontorag_flow.ontorag_client.client import OntoragClient
 
     ONTORAG_MCP = "http://localhost:8000/mcp/"
     FUSEKI_SPARQL = "http://localhost:3030/ontorag/sparql"
-    SUBJECT   = "urn:flow:test:assert-triple-live"
+    SUBJECT = "urn:flow:test:assert-triple-live"
     PREDICATE = "http://www.w3.org/2000/01/rdf-schema#label"
-    OBJECT    = "ontorag-flow AssertTriple integration test"
+    OBJECT = "ontorag-flow AssertTriple integration test"
 
     client = OntoragClient(ONTORAG_MCP)
     await client.connect()
@@ -180,9 +194,13 @@ async def test_assert_triple_live_roundtrip() -> None:
     assert "retract_triple" in tools
 
     action = AssertTriple(client)
-    params = action.input_schema.model_validate({
-        "subject": SUBJECT, "predicate": PREDICATE, "object": OBJECT,
-    })
+    params = action.input_schema.model_validate(
+        {
+            "subject": SUBJECT,
+            "predicate": PREDICATE,
+            "object": OBJECT,
+        }
+    )
 
     # assert
     result = await action.execute(params, EMPTY_STATE)
@@ -193,7 +211,8 @@ async def test_assert_triple_live_roundtrip() -> None:
     async with httpx.AsyncClient(auth=auth, timeout=10.0) as http:
         ask = f'ASK {{ GRAPH ?g {{ <{SUBJECT}> <{PREDICATE}> "{OBJECT}" . }} }}'
         resp = await http.post(
-            FUSEKI_SPARQL, data={"query": ask},
+            FUSEKI_SPARQL,
+            data={"query": ask},
             headers={"Accept": "application/sparql-results+json"},
         )
         resp.raise_for_status()
@@ -204,7 +223,8 @@ async def test_assert_triple_live_roundtrip() -> None:
 
     async with httpx.AsyncClient(auth=auth, timeout=10.0) as http:
         resp2 = await http.post(
-            FUSEKI_SPARQL, data={"query": ask},
+            FUSEKI_SPARQL,
+            data={"query": ask},
             headers={"Accept": "application/sparql-results+json"},
         )
         resp2.raise_for_status()
@@ -217,13 +237,14 @@ async def test_assert_triple_live_roundtrip() -> None:
 async def test_retract_triple_live() -> None:
     """RetractTriple 액션 독립 테스트 — assert 후 retract, 결과 검증."""
     import httpx
+
     from ontorag_flow.ontorag_client.client import OntoragClient
 
     ONTORAG_MCP = "http://localhost:8000/mcp/"
     FUSEKI_SPARQL = "http://localhost:3030/ontorag/sparql"
-    SUBJECT   = "urn:flow:test:retract-live"
+    SUBJECT = "urn:flow:test:retract-live"
     PREDICATE = "http://www.w3.org/2000/01/rdf-schema#label"
-    OBJECT    = "retract test"
+    OBJECT = "retract test"
 
     client = OntoragClient(ONTORAG_MCP)
     await client.connect()
@@ -249,7 +270,8 @@ async def test_retract_triple_live() -> None:
     async with httpx.AsyncClient(auth=auth, timeout=10.0) as http:
         ask = f'ASK {{ GRAPH ?g {{ <{SUBJECT}> <{PREDICATE}> "{OBJECT}" . }} }}'
         resp = await http.post(
-            FUSEKI_SPARQL, data={"query": ask},
+            FUSEKI_SPARQL,
+            data={"query": ask},
             headers={"Accept": "application/sparql-results+json"},
         )
         assert resp.json()["boolean"] is False

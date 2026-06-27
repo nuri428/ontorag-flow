@@ -38,58 +38,60 @@ async def record_incident(
     service_uri = f"urn:ag:service:{service}"
 
     async with await MemoryClient.create() as mem:
-        saved = await mem.remember_bulk([
-            # 인시던트 레이블
-            {
-                "subject": incident_uri,
-                "predicate": P.LABEL,
-                "object": f"[{severity}] {slug} — {today}",
-            },
-            # 근본 원인 (rationale)
-            {
-                "subject": incident_uri,
-                "predicate": P.RATIONALE,
-                "object": root_cause,
-            },
-            # 수정 요약 (content)
-            {
-                "subject": incident_uri,
-                "predicate": P.CONTENT,
-                "object": fix_summary,
-            },
-            # 날짜
-            {
-                "subject": incident_uri,
-                "predicate": P.MADE_AT,
-                "object": today,
-            },
-            # 영향 서비스 URI 연결
-            {
-                "subject": incident_uri,
-                "predicate": P.INVOLVES,
-                "object": service_uri,
-                "object_is_uri": True,
-            },
-            # 영향 사용자 수 (description에 포함)
-            {
-                "subject": incident_uri,
-                "predicate": P.DESCRIPTION,
-                "object": f"영향 사용자: {affected_users}명 | severity: {severity}",
-            },
-            # patent-board 프로젝트와 연결
-            {
-                "subject": incident_uri,
-                "predicate": P.INVOLVES,
-                "object": "urn:ag:proj:patent-board",
-                "object_is_uri": True,
-            },
-            # 서비스 레이블
-            {
-                "subject": service_uri,
-                "predicate": P.LABEL,
-                "object": service,
-            },
-        ])
+        saved = await mem.remember_bulk(
+            [
+                # 인시던트 레이블
+                {
+                    "subject": incident_uri,
+                    "predicate": P.LABEL,
+                    "object": f"[{severity}] {slug} — {today}",
+                },
+                # 근본 원인 (rationale)
+                {
+                    "subject": incident_uri,
+                    "predicate": P.RATIONALE,
+                    "object": root_cause,
+                },
+                # 수정 요약 (content)
+                {
+                    "subject": incident_uri,
+                    "predicate": P.CONTENT,
+                    "object": fix_summary,
+                },
+                # 날짜
+                {
+                    "subject": incident_uri,
+                    "predicate": P.MADE_AT,
+                    "object": today,
+                },
+                # 영향 서비스 URI 연결
+                {
+                    "subject": incident_uri,
+                    "predicate": P.INVOLVES,
+                    "object": service_uri,
+                    "object_is_uri": True,
+                },
+                # 영향 사용자 수 (description에 포함)
+                {
+                    "subject": incident_uri,
+                    "predicate": P.DESCRIPTION,
+                    "object": f"영향 사용자: {affected_users}명 | severity: {severity}",
+                },
+                # patent-board 프로젝트와 연결
+                {
+                    "subject": incident_uri,
+                    "predicate": P.INVOLVES,
+                    "object": "urn:ag:proj:patent-board",
+                    "object_is_uri": True,
+                },
+                # 서비스 레이블
+                {
+                    "subject": service_uri,
+                    "predicate": P.LABEL,
+                    "object": service,
+                },
+            ]
+        )
 
         logger.info("저장된 트리플: %d개", saved)
         logger.info("인시던트 URI: %s", incident_uri)

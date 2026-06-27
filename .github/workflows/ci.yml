@@ -100,7 +100,7 @@ jobs:
         run: uv sync --extra dev --python ${{ matrix.python }}
 
       - name: Run pytest
-        run: uv run pytest --cov=src/ontorag_flow --cov-report=xml --cov-report=term
+        run: uv run pytest -m "not integration" --cov=src/ontorag_flow --cov-report=xml --cov-report=term
 
       - name: Upload coverage
         uses: actions/upload-artifact@v7
