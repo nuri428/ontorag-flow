@@ -10,6 +10,11 @@ The LLM is reached through a narrow :class:`LlmClient` Protocol, so the engine i
 testable with a fake and provider-agnostic — concrete Anthropic/OpenAI/Ollama
 adapters live in :mod:`ontorag_flow.engines.llm_providers`. No LangChain/-Index;
 direct SDK calls only (matching ontorag's posture).
+
+Optionally, a :class:`WhyContextProvider` can be injected to enrich the prompt
+with ontology provenance context (rationale, decided_against, influenced_by) for
+each allowed action URI. The concrete implementation that uses ontorag-memory's
+``MemoryClient`` lives in :mod:`ontorag_flow.engines.memory_adapter`.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from ontorag_flow.log import get_logger
 
 logger = get_logger(__name__)
 
-__all__ = ["LlmAgentEngine", "LlmClient"]
+__all__ = ["LlmAgentEngine", "LlmClient", "WhyContextProvider"]
 
 # Sentinels from the security block of _SYSTEM_PROMPT. If a raw reply
 # contains any of these literals it means the LLM is *echoing back* the
@@ -73,6 +78,21 @@ class LlmClient(Protocol):
     async def complete(self, *, system: str, user: str) -> str: ...
 
 
+class WhyContextProvider(Protocol):
+    """Structural contract for ontology provenance context injection.
+
+    Implementations fetch rationale / decided-against / influenced-by for a
+    given entity URI and return it as a plain string suitable for inclusion
+    in an LLM prompt. An empty string means "no context available — skip".
+
+    The concrete adapter that backs this with ``ontorag_memory.MemoryClient``
+    lives in :mod:`ontorag_flow.engines.memory_adapter`. Any object with a
+    matching ``get_why_context`` signature satisfies this protocol.
+    """
+
+    async def get_why_context(self, uri: str) -> str: ...
+
+
 class LlmAgentEngine:
     """Proposes next actions by prompting an LLM and parsing its JSON reply."""
 
@@ -82,6 +102,7 @@ class LlmAgentEngine:
         *,
         registry: ActionRegistry | None = None,
         max_proposals: int = 3,
+        why_provider: WhyContextProvider | None = None,
     ) -> None:
         """Bind the engine to an LLM client.
 
@@ -90,11 +111,18 @@ class LlmAgentEngine:
             registry: Optional action registry; when given, the prompt is
                 enriched with each allowed action's description and input schema.
             max_proposals: Cap on the number of proposals returned.
+            why_provider: Optional ontology provenance provider. When set,
+                the prompt is enriched with rationale / decided-against /
+                influenced-by context for each allowed action URI, giving the
+                LLM deeper reasoning about *why* each action exists. The
+                concrete adapter for ontorag-memory lives in
+                :mod:`ontorag_flow.engines.memory_adapter`.
         """
 
         self._client = client
         self._registry = registry
         self._max_proposals = max_proposals
+        self._why_provider = why_provider
         # Audit-able trail of proposals the LLM returned but were dropped by
         # _parse (not a dict, missing action_uri, disallowed action). Populated
         # on every parse call; surfaced through explain() so an operator can
@@ -117,7 +145,7 @@ class LlmAgentEngine:
         if not process.allowed_actions:
             return []
 
-        user_prompt = self._build_user_prompt(case, process)
+        user_prompt = await self._build_user_prompt(case, process)
         raw = await self._client.complete(system=_SYSTEM_PROMPT, user=user_prompt)
         if _detect_prompt_echo(raw):
             logger.warning(
@@ -157,7 +185,7 @@ class LlmAgentEngine:
                 trace={"reason": "no allowed actions in process"},
             )
 
-        user_prompt = self._build_user_prompt(case, process)
+        user_prompt = await self._build_user_prompt(case, process)
         raw = await self._client.complete(system=_SYSTEM_PROMPT, user=user_prompt)
         prompt_echo = _detect_prompt_echo(raw)
         if prompt_echo:
@@ -186,8 +214,14 @@ class LlmAgentEngine:
             },
         )
 
-    def _build_user_prompt(self, case: Case, process: ProcessDefinition) -> str:
-        """Render the case, goal, and allowed-action catalog as a prompt."""
+    async def _build_user_prompt(self, case: Case, process: ProcessDefinition) -> str:
+        """Render the case, goal, allowed-action catalog, and ontology context as a prompt.
+
+        When a :class:`WhyContextProvider` is configured, each allowed action's
+        provenance context (rationale, decided-against, influenced-by) is fetched
+        and appended. Empty responses are skipped silently — a missing ``why``
+        record never blocks proposal generation.
+        """
 
         state_json = json.dumps(case.state.properties, default=str, sort_keys=True)
         goal_json = json.dumps(case.state.goal, default=str, sort_keys=True)
@@ -201,6 +235,21 @@ class LlmAgentEngine:
         ]
         for uri in process.allowed_actions:
             lines.append(self._describe_action(uri))
+
+        if self._why_provider is not None:
+            why_parts: list[str] = []
+            for uri in process.allowed_actions:
+                try:
+                    ctx = await self._why_provider.get_why_context(uri)
+                except Exception:
+                    ctx = ""
+                if ctx:
+                    why_parts.append(ctx)
+            if why_parts:
+                lines.append("")
+                lines.append("Ontology provenance context for allowed actions:")
+                lines.extend(why_parts)
+
         lines.append("")
         lines.append("Return the JSON array of proposals now.")
         return "\n".join(lines)

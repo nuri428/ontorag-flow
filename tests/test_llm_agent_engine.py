@@ -8,13 +8,14 @@ from ontorag_flow.core.case import Case
 from ontorag_flow.core.process import ProcessDefinition
 from ontorag_flow.core.registry import default_registry
 from ontorag_flow.core.state import CaseState
-from ontorag_flow.engines.llm_agent import LlmAgentEngine
+from ontorag_flow.engines.llm_agent import LlmAgentEngine, WhyContextProvider
 from ontorag_flow.engines.llm_providers import (
     AnthropicClient,
     OllamaClient,
     OpenAIClient,
     make_llm_client,
 )
+from ontorag_flow.engines.memory_adapter import MemoryWhyProvider
 
 UPDATE = "urn:ontorag-flow:action:UpdateCaseProperty"
 SET_GOAL = "urn:ontorag-flow:action:SetGoal"
@@ -181,3 +182,136 @@ def test_extract_json_array_returns_none_for_scalar_top_level() -> None:
 
     assert _extract_json_array('"a string"') is None
     assert _extract_json_array("42") is None
+
+
+# --- WhyContextProvider / why_provider injection --------------------------
+
+
+class FakeWhyProvider:
+    """Records which URIs were queried and returns fixed context strings."""
+
+    def __init__(self, context_map: dict[str, str] | None = None) -> None:
+        self.queried: list[str] = []
+        self._map = context_map or {}
+
+    async def get_why_context(self, uri: str) -> str:
+        self.queried.append(uri)
+        return self._map.get(uri, "")
+
+
+async def test_why_provider_context_appears_in_prompt() -> None:
+    """Why context strings from the provider are injected into the user prompt."""
+    fake = FakeLlm("[]")
+    provider = FakeWhyProvider({UPDATE: "## Why UpdateCaseProperty\n- rationale: state update"})
+    engine = LlmAgentEngine(fake, why_provider=provider)
+    await engine.propose_next(_case(), _process())
+
+    assert fake.last_user is not None
+    assert "Ontology provenance context" in fake.last_user
+    assert "rationale: state update" in fake.last_user
+
+
+async def test_why_provider_queried_for_each_allowed_action() -> None:
+    provider = FakeWhyProvider()
+    engine = LlmAgentEngine(FakeLlm("[]"), why_provider=provider)
+    await engine.propose_next(_case(), _process(allowed=[UPDATE, SET_GOAL]))
+
+    assert UPDATE in provider.queried
+    assert SET_GOAL in provider.queried
+
+
+async def test_empty_why_context_not_injected() -> None:
+    """If all why() responses are empty, no provenance section is added."""
+    fake = FakeLlm("[]")
+    provider = FakeWhyProvider()  # all empty
+    engine = LlmAgentEngine(fake, why_provider=provider)
+    await engine.propose_next(_case(), _process())
+
+    assert fake.last_user is not None
+    assert "Ontology provenance context" not in fake.last_user
+
+
+async def test_why_provider_exception_is_silently_skipped() -> None:
+    """A crashing why_provider must not break proposal generation."""
+
+    class BrokenProvider:
+        async def get_why_context(self, uri: str) -> str:
+            raise RuntimeError("network error")
+
+    fake = FakeLlm(f'[{{"action_uri":"{UPDATE}","confidence":0.8}}]')
+    engine = LlmAgentEngine(fake, why_provider=BrokenProvider())
+    proposals = await engine.propose_next(_case(), _process())
+
+    assert len(proposals) == 1
+    assert proposals[0].action_uri == UPDATE
+
+
+async def test_no_why_provider_prompt_unchanged() -> None:
+    """Without why_provider the prompt must not contain provenance section."""
+    fake = FakeLlm("[]")
+    engine = LlmAgentEngine(fake)
+    await engine.propose_next(_case(), _process())
+
+    assert fake.last_user is not None
+    assert "Ontology provenance context" not in fake.last_user
+
+
+def test_why_context_provider_protocol_satisfied_by_fake() -> None:
+    """FakeWhyProvider structurally satisfies WhyContextProvider."""
+    provider: WhyContextProvider = FakeWhyProvider()
+    assert hasattr(provider, "get_why_context")
+
+
+# --- MemoryWhyProvider unit tests (no Fuseki needed) ----------------------
+
+
+async def test_memory_why_provider_returns_context_str() -> None:
+    """MemoryWhyProvider calls mem.why() and returns to_context_str()."""
+
+    class _FakeResult:
+        rationale = "Why-first memory"
+        decided_against = ["flat-file"]
+        influenced_by = ["urn:ag:agent:hermes"]
+
+        def to_context_str(self) -> str:
+            return "## Why urn:x\n- rationale: Why-first memory"
+
+    class _FakeMem:
+        async def why(self, uri: str) -> _FakeResult:
+            return _FakeResult()
+
+    provider = MemoryWhyProvider(_FakeMem())
+    ctx = await provider.get_why_context("urn:x")
+    assert "Why-first memory" in ctx
+
+
+async def test_memory_why_provider_returns_empty_on_no_content() -> None:
+    """Returns empty string when why() result has no rationale/decided/influenced."""
+
+    class _EmptyResult:
+        rationale = ""
+        decided_against: list[str] = []
+        influenced_by: list[str] = []
+
+        def to_context_str(self) -> str:
+            return ""
+
+    class _FakeMem:
+        async def why(self, uri: str) -> _EmptyResult:
+            return _EmptyResult()
+
+    provider = MemoryWhyProvider(_FakeMem())
+    ctx = await provider.get_why_context("urn:x")
+    assert ctx == ""
+
+
+async def test_memory_why_provider_returns_empty_on_exception() -> None:
+    """Returns empty string when mem.why() raises any exception."""
+
+    class _ErrMem:
+        async def why(self, uri: str) -> None:
+            raise ConnectionError("fuseki down")
+
+    provider = MemoryWhyProvider(_ErrMem())
+    ctx = await provider.get_why_context("urn:x")
+    assert ctx == ""
