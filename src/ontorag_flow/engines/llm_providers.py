@@ -59,7 +59,9 @@ class AnthropicClient:
                 system=system,
                 messages=[{"role": "user", "content": user}],
                 betas=["server-side-fallback-2026-06-01"],
-                fallbacks=[{"model": "claude-opus-4-8"}],
+                # fallbacks is a beta-only param not yet in the SDK type stubs;
+                # pass via extra_body to keep the call type-safe.
+                extra_body={"fallbacks": [{"model": "claude-opus-4-8"}]},
             )
         else:
             message = await client.messages.create(
