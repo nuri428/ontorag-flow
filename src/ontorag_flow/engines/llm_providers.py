@@ -23,7 +23,13 @@ __all__ = [
 ]
 
 _MAX_TOKENS = 1024
+# Fable 5's adaptive thinking tokens count toward max_tokens; allocate enough
+# headroom so the model can reason before producing the JSON proposals.
+_FABLE_MAX_TOKENS = 8096
 _DEFAULT_TIMEOUT_SECONDS = 30.0
+# Fable 5 can run for several minutes on hard reasoning tasks.
+_FABLE_TIMEOUT_SECONDS = 180.0
+_FABLE_5_MODEL = "claude-fable-5"
 
 
 class AnthropicClient:
@@ -32,6 +38,7 @@ class AnthropicClient:
     def __init__(self, model: str = "claude-sonnet-4-6", *, api_key: str | None = None) -> None:
         self._model = model
         self._api_key = api_key
+        self._is_fable = model == _FABLE_5_MODEL
 
     async def complete(self, *, system: str, user: str) -> str:
         try:
@@ -39,13 +46,40 @@ class AnthropicClient:
         except ImportError as exc:  # pragma: no cover - requires the `llm` extra
             raise RuntimeError("anthropic is not installed; install the 'llm' extra.") from exc
 
-        client = AsyncAnthropic(api_key=self._api_key, timeout=_DEFAULT_TIMEOUT_SECONDS)
-        message = await client.messages.create(
-            model=self._model,
-            max_tokens=_MAX_TOKENS,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
+        timeout = _FABLE_TIMEOUT_SECONDS if self._is_fable else _DEFAULT_TIMEOUT_SECONDS
+        max_tokens = _FABLE_MAX_TOKENS if self._is_fable else _MAX_TOKENS
+        client = AsyncAnthropic(api_key=self._api_key, timeout=timeout)
+
+        if self._is_fable:
+            # Fable 5: thinking is always on (omit the parameter), use server-side
+            # fallbacks so a safety refusal is transparently re-served by Opus 4.8.
+            message = await client.beta.messages.create(
+                model=self._model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+                betas=["server-side-fallback-2026-06-01"],
+                fallbacks=[{"model": "claude-opus-4-8"}],
+            )
+        else:
+            message = await client.messages.create(
+                model=self._model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+
+        # Fable 5 (and the Opus 4.8 fallback) can return stop_reason="refusal".
+        # An empty content array means nothing to parse — return "" so the
+        # engine's JSON parser produces no proposals rather than crashing.
+        if getattr(message, "stop_reason", None) == "refusal":
+            logger.warning(
+                "Anthropic safety classifier declined the request (model=%s); "
+                "returning empty response so the engine produces no proposals.",
+                self._model,
+            )
+            return ""
+
         # Anthropic's ContentBlock is a union of many types (text / tool_use /
         # thinking / ...); only TextBlock has a ``text`` attribute. Filter by
         # the type tag, then use getattr so the type checker is happy with the
